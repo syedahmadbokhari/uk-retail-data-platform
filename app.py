@@ -18,9 +18,12 @@ st.markdown("Interactive analytics dashboard for retail revenue performance.")
 # ------------------------------------------------
 # Database Connection
 # ------------------------------------------------
-@st.cache_resource
+import os
+
+DB_PATH = os.path.join(os.path.dirname(__file__), "retailDB.sqlite")
+
 def load_connection():
-    conn = sqlite3.connect("retailDB.sqlite")
+    conn = sqlite3.connect(DB_PATH, check_same_thread=False)
     return conn
 
 conn = load_connection()
