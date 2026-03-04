@@ -31,7 +31,7 @@ The dashboard provides:
 
 The project also includes a **Power BI executive dashboard** designed for business stakeholders.
 
-![Dashboard](images/dashboard_screenshot.png)
+![Dashboard](assets/dashboard_screenshot.png)
 
 Dashboard Features:
 
