@@ -85,7 +85,7 @@ These tables were joined using SQL to analyze **revenue performance, product pop
 
 Revenue is **highly concentrated in one brand**.
 
-![Revenue by Brand](images/revenue_by_brand.png)
+![Revenue by Brand](assets/revenue_by_brand.png)
 
 Key finding:
 
@@ -108,7 +108,7 @@ Revenue is primarily driven by **premium product lines**.
 
 A small group of products generates a large share of revenue.
 
-![Top Products](images/Top 10 most purchased products.png)
+![Top Products](assets/top_products.png)
 
 Key insight:
 
@@ -132,7 +132,8 @@ Key implication:
 
 Monthly revenue trends show fluctuations throughout the year.
 
-![Monthly Revenue Trend](images/monthly_trend.png)
+![Monthly Trend](assets/monthly_trend.png)
+
 
 Observations:
 
