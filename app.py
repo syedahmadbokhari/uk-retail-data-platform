@@ -2,6 +2,7 @@ import streamlit as st
 import sqlite3
 import pandas as pd
 import plotly.express as px
+import os
 
 # ------------------------------------------------
 # Page Settings
@@ -18,19 +19,34 @@ st.markdown("Interactive analytics dashboard for retail revenue performance.")
 # ------------------------------------------------
 # Database Connection
 # ------------------------------------------------
-import os
 
-DB_PATH = os.path.join(os.path.dirname(__file__), "retailDB.sqlite")
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+DB_PATH = os.path.join(BASE_DIR, "data", "retailDB.sqlite")
 
 def load_connection():
-    conn = sqlite3.connect(DB_PATH, check_same_thread=False)
-    return conn
+    if not os.path.exists(DB_PATH):
+        st.error("❌ Database file not found.")
+        st.stop()
+    return sqlite3.connect(DB_PATH, check_same_thread=False)
 
 conn = load_connection()
 
 # ------------------------------------------------
+# Check Database Tables
+# ------------------------------------------------
+
+cursor = conn.cursor()
+cursor.execute("SELECT name FROM sqlite_master WHERE type='table';")
+tables = cursor.fetchall()
+
+if len(tables) == 0:
+    st.error("❌ Database has no tables.")
+    st.stop()
+
+# ------------------------------------------------
 # KPI Queries
 # ------------------------------------------------
+
 total_revenue_query = """
 SELECT SUM(modified_revenue) AS total_revenue
 FROM finance;
@@ -56,12 +72,17 @@ FROM brand_revenue
 ORDER BY total_revenue DESC;
 """
 
-total_revenue = pd.read_sql(total_revenue_query, conn)
-brand_share = pd.read_sql(brand_share_query, conn)
+try:
+    total_revenue = pd.read_sql(total_revenue_query, conn)
+    brand_share = pd.read_sql(brand_share_query, conn)
+except Exception as e:
+    st.error(f"SQL Error: {e}")
+    st.stop()
 
 # ------------------------------------------------
 # KPI DISPLAY
 # ------------------------------------------------
+
 col1, col2 = st.columns(2)
 
 col1.metric(
@@ -79,6 +100,7 @@ st.divider()
 # ------------------------------------------------
 # Revenue by Brand
 # ------------------------------------------------
+
 brand_query = """
 SELECT 
     b.brand,
@@ -102,6 +124,7 @@ fig_brand = px.bar(
 # ------------------------------------------------
 # Discount Category
 # ------------------------------------------------
+
 discount_query = """
 SELECT 
     CASE 
@@ -123,21 +146,23 @@ fig_discount = px.pie(
 )
 
 # ------------------------------------------------
-# Display Charts in Columns
+# Display Charts
 # ------------------------------------------------
+
 col1, col2 = st.columns(2)
 
 with col1:
-    st.plotly_chart(fig_brand, width="stretch")
+    st.plotly_chart(fig_brand, use_container_width=True)
 
 with col2:
-    st.plotly_chart(fig_discount, width="stretch")
+    st.plotly_chart(fig_discount, use_container_width=True)
 
 st.divider()
 
 # ------------------------------------------------
 # Review vs Revenue
 # ------------------------------------------------
+
 rating_query = """
 SELECT 
     r.real_rating,
@@ -149,8 +174,6 @@ ORDER BY r.real_rating DESC;
 """
 
 rating_df = pd.read_sql(rating_query, conn)
-
-# Remove rows with missing values
 rating_df = rating_df.dropna()
 
 fig_rating = px.scatter(
@@ -160,9 +183,11 @@ fig_rating = px.scatter(
     title="Revenue vs Product Rating",
     size="total_revenue"
 )
+
 # ------------------------------------------------
 # Monthly Traffic
 # ------------------------------------------------
+
 traffic_query = """
 SELECT 
     SUBSTR(modified_last_visited, 1, 7) AS month,
@@ -185,16 +210,17 @@ fig_traffic = px.line(
 col1, col2 = st.columns(2)
 
 with col1:
-    st.plotly_chart(fig_rating, width="stretch")
+    st.plotly_chart(fig_rating, use_container_width=True)
 
 with col2:
-    st.plotly_chart(fig_traffic, width="stretch")
+    st.plotly_chart(fig_traffic, use_container_width=True)
 
 st.divider()
 
 # ------------------------------------------------
 # Top Products
 # ------------------------------------------------
+
 top_products_query = """
 SELECT 
     i.product_name,
