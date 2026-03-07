@@ -59,24 +59,31 @@ The objective was to transform raw transactional data into **strategic insights 
 
 ---
 
-# 🗂 Dataset
+## 🗂 Dataset
 
-The dataset is stored in a **SQLite relational database**.
+The dataset is stored in a **SQLite relational database** containing multiple tables representing different aspects of retail operations.
 
-Database file:
-
-Main tables used in the analysis:
+### Main Tables
 
 | Table | Description |
 |------|-------------|
-| **finance** | Revenue, pricing, and discount data |
-| **brands** | Brand classification |
-| **info** | Product information |
-| **reviews** | Customer ratings |
-| **traffic** | Website visit activity |
+| `finance` | Revenue, pricing, and discount data |
+| `brands` | Brand classification for products |
+| `info` | Product information and metadata |
+| `reviews` | Customer ratings and reviews |
+| `traffic` | Website traffic and product visit activity |
 
-These tables were joined using SQL to analyze **revenue performance, product popularity, and traffic patterns**.
+These tables are connected using **product_id**, enabling multi-table analysis of revenue performance, pricing strategies, product popularity, and customer engagement.
 
+The dataset supports analysis of:
+
+- brand revenue contribution
+- product-level performance
+- pricing and discount strategies
+- customer ratings vs revenue
+- seasonal traffic trends
+
+This structure simulates a **real-world retail analytics environment**, allowing the project to demonstrate SQL analysis, business intelligence reporting, and data storytelling.
 ---
 
 # 🔎 Key Business Insights
@@ -95,6 +102,31 @@ Key finding:
 This suggests **significant brand dependency risk**.
 
 ---
+## 🧪 Methodology
+
+This project followed a structured data analytics workflow to transform raw retail data into business insights and interactive dashboards.
+
+**1. Data Exploration**  
+The SQLite database was explored to understand table structures, relationships, and available metrics such as revenue, pricing, discounts, product information, customer ratings, and website traffic.
+
+**2. Data Preparation**  
+Relevant tables were joined using SQL to create a unified analytical dataset. Data cleaning steps included validating product identifiers, handling missing values, and structuring time-based fields for trend analysis.
+
+**3. SQL Analysis**  
+Core analysis was performed using SQL queries with aggregations and joins. Key analyses included revenue by brand, top-performing products, discount impact on revenue, and monthly traffic trends.
+
+**4. Exploratory Analysis (Python)**  
+Python (Pandas and Plotly) was used to further analyze the SQL outputs and generate visualizations used in the dashboards.
+
+**5. Dashboard Development**  
+Two dashboards were created:
+- **Streamlit dashboard** for interactive exploration of KPIs, brand performance, and product insights.
+- **Power BI dashboard** designed for executive-level reporting and business decision-making.
+
+The final stage focused on translating analytical results into actionable business insights.
+
+---
+
 
 ## 2️⃣ Total Revenue Performance
 
