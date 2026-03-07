@@ -128,7 +128,7 @@ The final stage focused on translating analytical results into actionable busine
 ---
 ## 🏗 Data Architecture
 
-![Data Architecture](architecture_diagram.png)
+![Architecture Diagram](assets/architecture_diagram.png)
 
 # 🔎 Example SQL Analysis
 
