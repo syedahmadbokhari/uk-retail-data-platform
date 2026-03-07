@@ -128,7 +128,8 @@ The final stage focused on translating analytical results into actionable busine
 ---
 ## 🏗 Data Architecture
 
-![Data Architecture](architecture%20diagram.png)
+![Data Architecture](architecture_diagram.png)
+
 # 🔎 Example SQL Analysis
 
 Example query used to calculate revenue contribution by brand.
