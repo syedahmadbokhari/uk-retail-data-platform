@@ -143,7 +143,7 @@ JOIN brands b
 ON f.product_id = b.product_id
 GROUP BY b.brand
 ORDER BY total_revenue DESC;
-
+```
 
 ## 2️⃣ Total Revenue Performance
 
