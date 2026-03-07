@@ -126,6 +126,9 @@ Two dashboards were created:
 The final stage focused on translating analytical results into actionable business insights.
 
 ---
+## 🏗 Data Architecture
+
+![Data Architecture](architecture%20diagram.png)
 # 🔎 Example SQL Analysis
 
 Example query used to calculate revenue contribution by brand.
