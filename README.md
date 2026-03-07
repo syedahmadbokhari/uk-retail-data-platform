@@ -126,6 +126,19 @@ Two dashboards were created:
 The final stage focused on translating analytical results into actionable business insights.
 
 ---
+# 🔎 Example SQL Analysis
+
+Example query used to calculate revenue contribution by brand.
+
+```sql
+SELECT
+    b.brand,
+    SUM(f.revenue) AS total_revenue
+FROM finance f
+JOIN brands b
+ON f.product_id = b.product_id
+GROUP BY b.brand
+ORDER BY total_revenue DESC;
 
 
 ## 2️⃣ Total Revenue Performance
