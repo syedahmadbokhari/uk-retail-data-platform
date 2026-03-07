@@ -264,6 +264,19 @@ These findings help support decisions related to:
 
 ---
 
+## 📂 Project Structure
+
+sql-data-analysis/
+│
+├── assets/                # Images used in README
+├── data/                  # SQLite database
+├── outputs/               # Generated analysis outputs
+├── src/                   # Python analysis scripts
+├── app.py                 # Streamlit dashboard
+├── sql.ipynb              # SQL analysis notebook
+├── requirements.txt
+└── README.md
+
 # 👨‍💻 Author
 
 **Ahmad Bokhakari**
