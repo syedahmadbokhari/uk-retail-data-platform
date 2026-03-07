@@ -85,23 +85,6 @@ The dataset supports analysis of:
 
 This structure simulates a **real-world retail analytics environment**, allowing the project to demonstrate SQL analysis, business intelligence reporting, and data storytelling.
 ---
-
-# 🔎 Key Business Insights
-
-## 1️⃣ Revenue Concentration Risk
-
-Revenue is **highly concentrated in one brand**.
-
-![Revenue by Brand](assets/revenue_by_brand.png)
-
-Key finding:
-
-- **Adidas generates approximately 93% of total revenue**
-- Nike contributes only a small portion
-
-This suggests **significant brand dependency risk**.
-
----
 ## 🧪 Methodology
 
 This project followed a structured data analytics workflow to transform raw retail data into business insights and interactive dashboards.
@@ -125,10 +108,28 @@ Two dashboards were created:
 
 The final stage focused on translating analytical results into actionable business insights.
 
+
+# 🔎 Key Business Insights
+
+## 1️⃣ Revenue Concentration Risk
+
+Revenue is **highly concentrated in one brand**.
+
+![Revenue by Brand](assets/revenue_by_brand.png)
+
+Key finding:
+
+- **Adidas generates approximately 93% of total revenue**
+- Nike contributes only a small portion
+
+This suggests **significant brand dependency risk**.
+
 ---
 ## 🏗 Data Architecture
 
 ![Architecture Diagram](assets/architecture_diagram.png)
+
+The project follows an end-to-end analytics pipeline where raw retail data is stored in a SQLite database, analyzed using SQL and Python, and visualized through Streamlit and Power BI dashboards.
 
 # 🔎 Example SQL Analysis
 
@@ -147,9 +148,8 @@ ORDER BY total_revenue DESC;
 
 ## 2️⃣ Total Revenue Performance
 
-Total retail revenue exceeds:
-
-Revenue is primarily driven by **premium product lines**.
+Total retail revenue exceeds £12M, driven primarily by premium product lines from Adidas.
+This highlights the strong contribution of high-priced items to overall revenue performance.
 
 ---
 
