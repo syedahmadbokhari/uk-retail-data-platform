@@ -15,9 +15,9 @@ def _clean_finance(df: pd.DataFrame) -> pd.DataFrame:
     df = df[cols].copy()
     df = df.dropna(subset=["product_id", "modified_revenue"])
     df = df[df["modified_revenue"] >= 0]
-    df["modified_discount"] = df["modified_discount"].clip(0, 1).fillna(0)
-    df["modified_listing_price"] = df["modified_listing_price"].fillna(0)
-    df["modified_sale_price"] = df["modified_sale_price"].fillna(0)
+    for col in ["modified_listing_price", "modified_sale_price", "modified_discount"]:
+        df[col] = pd.to_numeric(df[col], errors="coerce").fillna(0)
+    df["modified_discount"] = df["modified_discount"].clip(0, 1)
     return df.reset_index(drop=True)
 
 
