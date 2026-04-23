@@ -1,6 +1,7 @@
 import os
 from contextlib import contextmanager
-from sqlalchemy import create_engine
+from sqlalchemy import create_engine, text
+import pandas as pd
 
 _ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
@@ -9,7 +10,8 @@ def _build_url() -> str:
     """
     Returns a PostgreSQL URL when DB_HOST is set, otherwise falls back to
     the local SQLite file.  This lets the ETL pipeline run against Postgres
-    in production and against SQLite locally / in CI without any code change.
+    in production (Docker) and against SQLite locally / in CI without any
+    code change.
     """
     host = os.getenv("DB_HOST")
     if host:
@@ -45,3 +47,35 @@ def get_connection():
     """
     with get_engine().begin() as conn:
         yield conn
+
+
+def upsert_df(df: pd.DataFrame, table_name: str, conflict_col: str, conn) -> int:
+    """
+    Insert all rows from df into table_name, updating existing rows on conflict.
+
+    Uses INSERT ... ON CONFLICT (conflict_col) DO UPDATE SET ..., which works
+    on both PostgreSQL and SQLite 3.24+ (Python 3.8+ ships with SQLite >= 3.31).
+
+    Returns the number of rows processed.
+    """
+    if df.empty:
+        return 0
+
+    # Ensure the table exists with the correct schema (zero rows inserted)
+    df.head(0).to_sql(table_name, conn, if_exists="append", index=False)
+
+    cols = list(df.columns)
+    col_list    = ", ".join(cols)
+    placeholders = ", ".join(f":{c}" for c in cols)
+    update_set  = ", ".join(
+        f"{c} = excluded.{c}" for c in cols if c != conflict_col
+    )
+
+    sql = text(f"""
+        INSERT INTO {table_name} ({col_list})
+        VALUES ({placeholders})
+        ON CONFLICT ({conflict_col}) DO UPDATE SET {update_set}
+    """)
+
+    conn.execute(sql, df.to_dict(orient="records"))
+    return len(df)

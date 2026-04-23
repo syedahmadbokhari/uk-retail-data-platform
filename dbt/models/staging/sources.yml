@@ -1,0 +1,19 @@
+version: 2
+
+# Declares the raw_* tables that Python's ingest step writes to Postgres.
+# dbt staging models SELECT from these sources.
+sources:
+  - name: retail_raw
+    schema: public
+    description: "Raw tables written by the Python ingest layer"
+    tables:
+      - name: raw_finance
+        description: "Raw financial data: prices, discounts, revenue per product"
+      - name: raw_brands
+        description: "Raw brand mapping: product_id → brand name"
+      - name: raw_info
+        description: "Raw product catalogue: names and descriptions"
+      - name: raw_reviews
+        description: "Raw review data: ratings (European decimal) and review counts"
+      - name: raw_traffic
+        description: "Raw traffic log: product page visits with timestamps"

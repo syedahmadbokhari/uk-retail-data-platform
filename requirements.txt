@@ -1,3 +1,4 @@
+# ── Core runtime ──────────────────────────────────────────────────────────────
 streamlit
 pandas
 plotly
@@ -5,3 +6,10 @@ scikit-learn
 numpy
 SQLAlchemy>=2.0
 psycopg2-binary
+
+# ── Orchestration (install separately or via Docker image) ────────────────────
+# apache-airflow[postgres]>=2.8   # heavy install — use docker compose up instead
+
+# ── dbt transformation layer ──────────────────────────────────────────────────
+dbt-core>=1.7,<2.0
+dbt-postgres>=1.7,<2.0

@@ -1,0 +1,69 @@
+version: 2
+
+models:
+  - name: stg_finance
+    description: "Cleaned financial data — listing price, sale price, discount, revenue"
+    columns:
+      - name: product_id
+        description: "Unique product identifier"
+        tests:
+          - not_null
+          - unique
+      - name: revenue
+        description: "Product revenue (>= 0)"
+        tests:
+          - not_null
+      - name: discount
+        description: "Discount rate clipped to [0, 1]"
+        tests:
+          - not_null
+
+  - name: stg_brands
+    description: "Cleaned brand mapping — product_id to title-cased brand name"
+    columns:
+      - name: product_id
+        tests:
+          - not_null
+          - unique
+      - name: brand
+        description: "Title-cased brand name"
+        tests:
+          - not_null
+          - accepted_values:
+              values: ["Adidas", "Nike"]
+
+  - name: stg_info
+    description: "Cleaned product catalogue — names and descriptions"
+    columns:
+      - name: product_id
+        tests:
+          - not_null
+          - unique
+      - name: product_name
+        tests:
+          - not_null
+
+  - name: stg_reviews
+    description: "Cleaned review data — ratings converted from European decimal format"
+    columns:
+      - name: product_id
+        tests:
+          - not_null
+          - unique
+      - name: rating
+        description: "Float rating in [0, 5] — European comma decimal converted to period"
+        tests:
+          - not_null
+      - name: review_count
+        tests:
+          - not_null
+
+  - name: stg_traffic
+    description: "Cleaned traffic log — product page visits with visit dates"
+    columns:
+      - name: product_id
+        tests:
+          - not_null
+      - name: last_visited
+        tests:
+          - not_null

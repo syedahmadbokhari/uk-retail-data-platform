@@ -1,0 +1,23 @@
+# dbt connection profile.
+# Reads from the same environment variables as the Python ETL layer so there
+# is a single source of truth for credentials.
+#
+# Usage:
+#   dbt run --profiles-dir ./dbt --project-dir ./dbt
+#
+# Docker: env vars are injected by docker-compose.yml
+# Local:  set DB_HOST, DB_USER, DB_PASSWORD, DB_NAME, DB_PORT before running
+
+retail:
+  target: dev
+  outputs:
+    dev:
+      type: postgres
+      host: "{{ env_var('DB_HOST', 'localhost') }}"
+      user: "{{ env_var('DB_USER', 'postgres') }}"
+      password: "{{ env_var('DB_PASSWORD', '') }}"
+      port: "{{ env_var('DB_PORT', '5432') | int }}"
+      dbname: "{{ env_var('DB_NAME', 'retail') }}"
+      schema: public
+      threads: 4
+      connect_timeout: 10

@@ -1,0 +1,55 @@
+version: 2
+
+models:
+  - name: mart_brand_revenue
+    description: "Revenue and market share aggregated by brand"
+    columns:
+      - name: brand
+        tests:
+          - not_null
+          - unique
+      - name: total_revenue
+        tests:
+          - not_null
+      - name: revenue_share_pct
+        description: "Percentage share of total revenue (all brands sum to 100)"
+        tests:
+          - not_null
+
+  - name: mart_product_revenue
+    description: "Total revenue with rank for every product"
+    columns:
+      - name: product_name
+        tests:
+          - not_null
+          - unique
+      - name: total_revenue
+        tests:
+          - not_null
+      - name: revenue_rank
+        tests:
+          - not_null
+
+  - name: mart_monthly_traffic
+    description: "Page visit counts grouped by calendar month (YYYY-MM)"
+    columns:
+      - name: month
+        tests:
+          - not_null
+          - unique
+      - name: visit_count
+        tests:
+          - not_null
+
+  - name: mart_discount_impact
+    description: "Revenue comparison between discounted and full-price products"
+    columns:
+      - name: category
+        tests:
+          - not_null
+          - unique
+          - accepted_values:
+              values: ["Discounted", "No Discount"]
+      - name: total_revenue
+        tests:
+          - not_null

@@ -1,0 +1,24 @@
+name: "retail"
+version: "1.0.0"
+config-version: 2
+
+profile: "retail"
+
+model-paths: ["models"]
+test-paths: ["tests"]
+analysis-paths: ["analyses"]
+snapshot-paths: ["snapshots"]
+seed-paths: ["seeds"]
+macro-paths: ["macros"]
+
+target-path: "target"
+clean-targets: ["target", "dbt_packages"]
+
+models:
+  retail:
+    staging:
+      +schema: staging
+      +materialized: view        # Staging = cheap views rebuilt on every dbt run
+    marts:
+      +schema: marts
+      +materialized: table       # Marts = persisted tables for downstream queries
