@@ -29,7 +29,10 @@ Thumbs.db
 outputs/*.csv
 
 # Logs
-*.log
+logs/*.log
+
+# Generated model artifacts (re-run pipeline/run_pipeline.py to regenerate)
+models/*.pkl
 
 # SQLite temporary files
 *.sqlite-journal

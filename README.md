@@ -1,22 +1,20 @@
-# 📊 Retail Revenue Performance Analysis
-### SQL • Python • Streamlit • Power BI • Data Analytics
+# 📊 Retail Data Platform — Analytics + Recommendation System
+### SQL • Python • ETL Pipeline • Scikit-learn • Streamlit • Power BI
 
-This project presents an **end-to-end retail data analytics case study** that analyzes brand performance, revenue concentration, pricing strategies, and product-level insights using **SQL, Python, and Business Intelligence dashboards**.
+This project is a **production-style retail data platform** built on top of a SQLite retail database. It combines a structured ETL pipeline, a layered data model, feature engineering, and a content-based recommendation engine — all surfaced through an interactive Streamlit dashboard.
 
-The goal of this project was to simulate a **real-world business analytics workflow**, transforming raw data into **actionable business insights and interactive dashboards**.
+The goal is to simulate a **real-world data engineering + ML workflow**, from raw data ingestion through to actionable product recommendations.
 
 ---
 
-# 🚀 Live Dashboard
+## 🚀 Live Dashboard
 
 ### Streamlit Interactive Dashboard
 
-You can explore the live interactive dashboard here:
-
-🔗 **Streamlit App**  
+🔗 **Streamlit App**
 https://sql-data-analysis-bisxvwilgc3ntxhken76wy.streamlit.app/
 
-The dashboard provides:
+Dashboard features:
 
 - Revenue KPI tracking
 - Brand performance analysis
@@ -24,16 +22,17 @@ The dashboard provides:
 - Monthly traffic trends
 - Top product performance
 - Revenue vs product ratings
+- **Product recommendation engine**
 
 ---
 
-# 📊 Power BI Dashboard
+## 📊 Power BI Dashboard
 
-The project also includes a **Power BI executive dashboard** designed for business stakeholders.
+The project also includes a **Power BI executive dashboard** for business stakeholders.
 
 ![Dashboard](assets/dashboard_screenshot.png)
 
-Dashboard Features:
+Dashboard features:
 
 - KPI cards for **Total Revenue and Brand Share**
 - **Revenue by Brand** comparison
@@ -44,240 +43,229 @@ Dashboard Features:
 
 ---
 
-# 🎯 Business Objectives
+## 🏗️ Architecture
 
-The analysis focused on answering key business questions:
-
-- Which brands generate the most revenue?
-- How concentrated is revenue across brands?
-- Which products drive the highest revenue?
-- Does discounting significantly impact revenue?
-- How does website traffic trend across months?
-- Is revenue concentrated among a small group of products?
-
-The objective was to transform raw transactional data into **strategic insights for retail decision-making**.
-
----
-
-## 🗂 Dataset
-
-The dataset is stored in a **SQLite relational database** containing multiple tables representing different aspects of retail operations.
-
-### Main Tables
-
-| Table | Description |
-|------|-------------|
-| `finance` | Revenue, pricing, and discount data |
-| `brands` | Brand classification for products |
-| `info` | Product information and metadata |
-| `reviews` | Customer ratings and reviews |
-| `traffic` | Website traffic and product visit activity |
-
-These tables are connected using **product_id**, enabling multi-table analysis of revenue performance, pricing strategies, product popularity, and customer engagement.
-
-The dataset supports analysis of:
-
-- brand revenue contribution
-- product-level performance
-- pricing and discount strategies
-- customer ratings vs revenue
-- seasonal traffic trends
-
-This structure simulates a **real-world retail analytics environment**, allowing the project to demonstrate SQL analysis, business intelligence reporting, and data storytelling.
----
-## 🧪 Methodology
-
-This project followed a structured data analytics workflow to transform raw retail data into business insights and interactive dashboards.
-
-**1. Data Exploration**  
-The SQLite database was explored to understand table structures, relationships, and available metrics such as revenue, pricing, discounts, product information, customer ratings, and website traffic.
-
-**2. Data Preparation**  
-Relevant tables were joined using SQL to create a unified analytical dataset. Data cleaning steps included validating product identifiers, handling missing values, and structuring time-based fields for trend analysis.
-
-**3. SQL Analysis**  
-Core analysis was performed using SQL queries with aggregations and joins. Key analyses included revenue by brand, top-performing products, discount impact on revenue, and monthly traffic trends.
-
-**4. Exploratory Analysis (Python)**  
-Python (Pandas and Plotly) was used to further analyze the SQL outputs and generate visualizations used in the dashboards.
-
-**5. Dashboard Development**  
-Two dashboards were created:
-- **Streamlit dashboard** for interactive exploration of KPIs, brand performance, and product insights.
-- **Power BI dashboard** designed for executive-level reporting and business decision-making.
-
-The final stage focused on translating analytical results into actionable business insights.
-
-
-# 🔎 Key Business Insights
-
-## 1️⃣ Revenue Concentration Risk
-
-Revenue is **highly concentrated in one brand**.
-
-![Revenue by Brand](assets/revenue_by_brand.png)
-
-Key finding:
-
-- **Adidas generates approximately 93% of total revenue**
-- Nike contributes only a small portion
-
-This suggests **significant brand dependency risk**.
-
----
-## 🏗 Data Architecture
-
-![Architecture Diagram](assets/architecture_diagram.png)
-
-The project follows an end-to-end analytics pipeline where raw retail data is stored in a SQLite database, analyzed using SQL and Python, and visualized through Streamlit and Power BI dashboards.
-
-# 🔎 Example SQL Analysis
-
-Example query used to calculate revenue contribution by brand.
-
-```sql
-SELECT
-    b.brand,
-    SUM(f.revenue) AS total_revenue
-FROM finance f
-JOIN brands b
-ON f.product_id = b.product_id
-GROUP BY b.brand
-ORDER BY total_revenue DESC;
+```
+Raw Data → Staging (raw_*) → Cleaned Tables (clean_*) → Analytics Tables → Features → Similarity Model → Dashboard
 ```
 
-## 2️⃣ Total Revenue Performance
+The pipeline runs end-to-end in under 1 second and produces:
 
-Total retail revenue exceeds £12M, driven primarily by premium product lines from Adidas.
-This highlights the strong contribution of high-priced items to overall revenue performance.
-
----
-
-## 3️⃣ Product Revenue Concentration
-
-A small group of products generates a large share of revenue.
-
-![Top Products](assets/top_products.png)
-
-Key insight:
-
-- A handful of products drive the majority of sales
-- Indicates strong **product-level demand concentration**
-
----
-
-## 4️⃣ Pricing & Discount Impact
-
-Discounted products contribute a meaningful portion of revenue.
-
-Key implication:
-
-- Customers appear **price sensitive**
-- Discount strategies can significantly influence demand
-
----
-
-## 5️⃣ Seasonal Revenue Trends
-
-Monthly revenue trends show fluctuations throughout the year.
-
-![Monthly Trend](assets/monthly_trend.png)
-
-
-Observations:
-
-- Mid-year revenue dips
-- Recovery toward the final quarter
-- Seasonal traffic patterns influence revenue
-
----
-
-# 📈 Streamlit Dashboard Features
-
-The Streamlit dashboard provides an **interactive analytics interface** including:
-
-- KPI Metrics
-- Revenue by Brand
-- Revenue by Discount Category
-- Monthly Traffic Trends
-- Revenue vs Product Ratings
-- Top 10 Products by Revenue
-
-Users can interactively explore the data through dynamic visualizations.
-
----
-
-# ⚙️ Technology Stack
-
-### Data Analysis
-- SQL
-- SQLite
-
-### Programming
-- Python
-- Pandas
-- Plotly
-
-### Dashboards
-- Streamlit
-- Power BI
-
-### Development Tools
-- Jupyter Notebook
-- Git
-- GitHub
-
-
----
-
-# 💼 Skills Demonstrated
-
-This project demonstrates key data analytics skills:
-
-- Advanced SQL querying
-- Data aggregation and joins
-- KPI development
-- Revenue concentration analysis
-- Pricing strategy evaluation
-- Data storytelling
-- Business intelligence dashboard design
-- Python data visualization
-- End-to-end analytics workflow
-
----
-
-# 📊 Business Value
-
-The analysis highlights several strategic insights:
-
-- Heavy dependency on a single brand
-- Strong product concentration in revenue generation
-- Discount strategies influence purchasing behavior
-- Seasonal demand impacts revenue patterns
-
-These findings help support decisions related to:
-
-- Brand diversification
-- Pricing strategy
-- Product portfolio optimization
-- Demand forecasting
+| Layer | Tables | Purpose |
+|-------|--------|---------|
+| Raw | `raw_finance`, `raw_brands`, `raw_info`, `raw_reviews`, `raw_traffic` | Exact copy of source data |
+| Clean | `clean_finance`, `clean_brands`, `clean_info`, `clean_reviews`, `clean_traffic` | Validated, typed, null-handled |
+| Analytics | `analytics_brand_revenue`, `analytics_product_revenue`, `analytics_monthly_traffic`, `analytics_discount_impact` | Pre-computed business metrics |
+| Features | `features_products` | ML-ready product feature table |
+| Model | `models/similarity.pkl` | Cosine similarity matrix (3120×3120) |
 
 ---
 
 ## 📂 Project Structure
 
-sql-data-analysis/
+```
+project/
 │
-├── assets/                # Images used in README
-├── data/                  # SQLite database
-├── outputs/               # Generated analysis outputs
-├── src/                   # Python analysis scripts
-├── app.py                 # Streamlit dashboard
-├── sql.ipynb              # SQL analysis notebook
-├── requirements.txt
-└── README.md
+├── data/
+│   └── retailDB.sqlite           # Source + all pipeline layers (same DB)
+│
+├── models/
+│   └── similarity.pkl            # Generated by pipeline (gitignored — regenerate locally)
+│
+├── src/
+│   ├── utils/
+│   │   ├── db.py                 # Connection context manager
+│   │   ├── logger.py             # Structured logging (console + file)
+│   │   └── validation.py        # Row count, null, duplicate checks
+│   ├── etl/
+│   │   ├── ingest.py             # Source → raw_* tables
+│   │   ├── clean.py              # raw_* → clean_* tables
+│   │   └── aggregate.py         # clean_* → analytics_* tables
+│   ├── features/
+│   │   └── build_features.py    # Builds features_products table + CSV
+│   └── recommender.py           # Similarity matrix + get_recommendations()
+│
+├── pipeline/
+│   └── run_pipeline.py          # Orchestrator — runs all 5 steps in sequence
+│
+├── outputs/
+│   └── features_products.csv    # Feature export
+│
+├── logs/
+│   └── pipeline.log             # Execution log (gitignored)
+│
+├── assets/                      # Dashboard screenshots
+├── app.py                       # Streamlit dashboard
+└── requirements.txt
+```
 
-# 👨‍💻 Author
+---
 
-**Ahmad Bokhakari**
+## ⚡ Quick Start
 
+```bash
+# Install dependencies
+pip install -r requirements.txt
+
+# Run the full pipeline (builds all layers + recommendation model)
+python pipeline/run_pipeline.py
+
+# Launch the dashboard
+streamlit run app.py
+```
+
+---
+
+## 🧱 1. ETL Pipeline
+
+### Ingest
+Copies all five source tables (`finance`, `brands`, `info`, `reviews`, `traffic`) into `raw_*` staging tables with row-count and null validation logged.
+
+### Clean
+Applies table-specific transformations:
+
+- **finance** — drops null revenues, clips discount to `[0, 1]`
+- **brands** — drops null brands, normalises casing
+- **info** — drops null product names, strips whitespace
+- **reviews** — converts European decimal ratings (`"3,3"` → `3.3`), clips to `[0, 5]`
+- **traffic** — drops null/empty visit timestamps
+
+59 null/garbage rows are removed in this step, leaving **3,120 clean products**.
+
+### Aggregate
+Builds four analytics tables using SQL aggregations:
+
+- `analytics_brand_revenue` — brand totals + revenue share %
+- `analytics_product_revenue` — product totals + rank
+- `analytics_monthly_traffic` — visit counts by month
+- `analytics_discount_impact` — revenue split by discount status
+
+---
+
+## 📦 2. Feature Engineering
+
+**Table:** `features_products`
+
+| Column | Source | Notes |
+|--------|--------|-------|
+| `product_id` | finance | Primary key |
+| `product_name` | info | Clean name |
+| `brand` | brands | Adidas / Nike |
+| `brand_encoded` | brands | Label encoded (0/1) |
+| `listing_price` | finance | AVG per product |
+| `discount` | finance | AVG discount rate |
+| `revenue` | finance | SUM revenue |
+| `rating` | reviews | AVG, median-imputed |
+| `review_count` | reviews | SUM |
+
+Missing ratings are imputed with the median. Review counts use CTE-based aggregation to avoid join duplication.
+
+---
+
+## 🧮 3. Recommendation System
+
+Content-based filtering using **cosine similarity** on the 6-feature product vector.
+
+**Features used:** `brand_encoded`, `listing_price`, `discount`, `revenue`, `rating`, `review_count`
+
+```python
+from src.recommender import load_similarity_artifact, get_recommendations
+
+artifact = load_similarity_artifact()
+recs = get_recommendations(product_id, artifact["df"], artifact["matrix"], top_n=5)
+```
+
+Returns a DataFrame with `product_name`, `brand`, `listing_price`, `rating`, `revenue`, `similarity_score`.
+
+**Example** — query: *Women's adidas Running Ultraboost 19 Shoes*
+
+| Product | Brand | Price | Rating | Similarity |
+|---------|-------|-------|--------|-----------|
+| Men's adidas Running Ultraboost 19 Shoes | Adidas | £170 | 4.8 | 99.8% |
+| Women's adidas Running Ultraboost 19 Shoes | Adidas | £160 | 4.3 | 99.8% |
+| Men's adidas Running Ultraboost 19 Shoes | Adidas | £180 | 4.7 | 99.6% |
+
+---
+
+## 🗂️ Dataset
+
+SQLite database with five tables:
+
+| Table | Description | Rows |
+|-------|-------------|------|
+| **finance** | Revenue, pricing, discount | 3,179 |
+| **brands** | Brand classification (Adidas / Nike) | 3,179 |
+| **info** | Product names and descriptions | 3,179 |
+| **reviews** | Customer ratings and review counts | 3,185 |
+| **traffic** | Website visit timestamps | 3,179 |
+
+---
+
+## 🔎 Key Business Insights
+
+### 1. Revenue Concentration Risk
+
+![Revenue by Brand](assets/revenue_by_brand.png)
+
+- **Adidas generates 93.49% of total revenue** (£11.5M vs Nike's £800K)
+- Significant brand dependency risk — diversification recommended
+
+### 2. Total Revenue
+- **£12.3M total retail revenue** across 3,120 clean products
+- Driven by premium running and lifestyle footwear
+
+### 3. Product Revenue Concentration
+
+![Top Products](assets/top_products.png)
+
+- Top 10 products account for a disproportionate share of revenue
+- Ultraboost and NMD lines dominate: up to £119K per product
+
+### 4. Pricing vs Discount Impact
+- Non-discounted products: **£4,545 avg revenue per product**
+- Discounted products: **£3,584 avg revenue** but higher total volume
+- Trade-off: discounts drive volume, full price preserves per-unit performance
+
+### 5. Social Proof Effect
+- High-review products generate **30× more avg revenue** than low-review products
+- Review generation campaigns have a measurable revenue impact
+
+### 6. Seasonal Trends
+
+![Monthly Trend](assets/monthly_trend.png)
+
+- Consistent traffic 2018–2020 with mid-year dips
+- Recovery toward Q4 each year
+
+---
+
+## ⚙️ Technology Stack
+
+| Layer | Tools |
+|-------|-------|
+| **Storage** | SQLite |
+| **ETL** | Python, Pandas |
+| **Analytics** | SQL (CTEs, window functions, aggregations) |
+| **ML / Recommendations** | scikit-learn (StandardScaler, cosine_similarity) |
+| **Dashboards** | Streamlit, Power BI |
+| **Logging** | Python logging |
+| **Dev Tools** | Jupyter Notebook, Git, GitHub |
+
+---
+
+## 💼 Skills Demonstrated
+
+- Data engineering — ETL pipeline, layered data modelling, staging/clean/analytics architecture
+- Advanced SQL — CTEs, window functions, multi-table joins, aggregations
+- Feature engineering — label encoding, null imputation, StandardScaler normalisation
+- Machine learning — content-based recommendation with cosine similarity
+- Data quality — validation checks (row count, nulls, duplicates), structured logging
+- Python — modular package structure, context managers, pandas, scikit-learn
+- Business intelligence — KPI development, dashboard design (Streamlit + Power BI)
+- Data storytelling — translating analysis into strategic recommendations
+
+---
+
+## 👨‍💻 Author
+
+**Ahmad Bokhari**
