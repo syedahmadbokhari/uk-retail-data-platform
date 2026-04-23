@@ -1,8 +1,9 @@
 import sqlite3
+import os
 
 try:
     # Connect to database (make sure file is in same folder)
-    conn = sqlite3.connect(r"C:\Users\ahmad\Downloads\SQL\retailDB.sqlite")
+    conn = sqlite3.connect(os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "data", "retailDB.sqlite"))
     cursor = conn.cursor()
 
     print("Connected successfully.")
