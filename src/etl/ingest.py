@@ -1,23 +1,18 @@
 import time
 import pandas as pd
+from sqlalchemy import text
 
-from src.utils.db import get_connection, upsert_df
+from src.utils.db import get_connection
 from src.utils.logger import get_logger
 from src.utils.validation import validate
 from src.utils.watermark import ensure_watermark_table, get_watermark, set_watermark
 
 logger = get_logger("etl.ingest")
 
-# Tables where product_id is a unique natural key → safe to UPSERT by product_id.
-# Traffic is an append-only event log (many rows per product), so it gets a full
-# snapshot replace instead of a per-product UPSERT.
-_UPSERT_TABLES = {
-    "finance": "product_id",
-    "brands":  "product_id",
-    "info":    "product_id",
-    "reviews": "product_id",
-}
-_SNAPSHOT_TABLES = ["traffic"]
+# All five source tables are full snapshots of a static catalogue.
+# We use if_exists="replace" — the watermark check below skips the
+# entire step when the source is unchanged, so this is still efficient.
+_SOURCE_TABLES = ["finance", "brands", "info", "reviews", "traffic"]
 
 
 def ingest_raw():
@@ -26,11 +21,12 @@ def ingest_raw():
 
     Incremental behaviour
     ─────────────────────
-    • pipeline_watermarks tracks the row count from the last successful run.
-    • If the source total row count matches the stored watermark the step is
-      skipped — no work needed.
-    • On change (or first run) each table is UPSERTed by product_id so the
-      operation is always idempotent: re-running never creates duplicates.
+    • pipeline_watermarks tracks the total source row count from the last run.
+    • If the count matches the watermark the step is skipped entirely —
+      no writes needed.
+    • On change (or first run) each table is fully replaced (snapshot semantics).
+      This is correct because the source tables are a static product catalogue,
+      not an event stream — every row represents the current state of a product.
     """
     start = time.time()
     logger.info("=== Ingestion: source → raw layer ===")
@@ -39,12 +35,9 @@ def ingest_raw():
         ensure_watermark_table(conn)
         last_ts, last_count = get_watermark(conn, "ingest")
 
-        # ── Quick change-detection: compare source row total to watermark ─────
         source_total = sum(
-            conn.execute(
-                __import__("sqlalchemy").text(f"SELECT COUNT(*) FROM {t}")
-            ).scalar()
-            for t in list(_UPSERT_TABLES) + _SNAPSHOT_TABLES
+            conn.execute(text(f"SELECT COUNT(*) FROM {t}")).scalar()
+            for t in _SOURCE_TABLES
         )
 
         if last_count is not None and source_total == last_count:
@@ -58,24 +51,14 @@ def ingest_raw():
             f"(previous: {last_count if last_count is not None else 'first run'})"
         )
 
-        # ── UPSERT tables (unique product_id) ─────────────────────────────────
-        total_upserted = 0
-        for tbl, conflict_col in _UPSERT_TABLES.items():
-            df = pd.read_sql(f"SELECT * FROM {tbl}", conn)
-            validate(df, tbl)
-            n = upsert_df(df, f"raw_{tbl}", conflict_col, conn)
-            total_upserted += n
-            logger.info(f"  raw_{tbl}: {n} rows upserted")
-
-        # ── Snapshot tables (full replace, event-log semantics) ───────────────
-        for tbl in _SNAPSHOT_TABLES:
+        total = 0
+        for tbl in _SOURCE_TABLES:
             df = pd.read_sql(f"SELECT * FROM {tbl}", conn)
             validate(df, tbl)
             df.to_sql(f"raw_{tbl}", conn, if_exists="replace", index=False)
-            logger.info(f"  raw_{tbl}: {len(df)} rows replaced (snapshot)")
-            total_upserted += len(df)
+            total += len(df)
+            logger.info(f"  raw_{tbl}: {len(df)} rows loaded")
 
         set_watermark(conn, "ingest", source_total)
 
-    elapsed = time.time() - start
-    logger.info(f"Ingestion complete — {total_upserted} rows processed in {elapsed:.2f}s")
+    logger.info(f"Ingestion complete — {total} rows in {time.time() - start:.2f}s")

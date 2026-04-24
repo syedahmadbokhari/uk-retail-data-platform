@@ -22,7 +22,7 @@ from datetime import timezone
 import pandas as pd
 from sqlalchemy import text
 
-from src.utils.db import get_connection, upsert_df
+from src.utils.db import get_connection, upsert_df, ensure_unique_index
 from src.utils.logger import get_logger
 from src.utils.validation import validate, ValidationError
 
@@ -167,10 +167,10 @@ def ingest_incremental() -> int:
         logger.info(f"Aggregated to {len(product_agg)} unique products")
 
         # ── UPSERT into raw_events_aggregated ────────────────────────────────
-        # Dedicated table for synthetic event aggregates (product_id is unique
-        # here by construction — we aggregated before writing).  Kept separate
-        # from raw_finance which has duplicate product_id rows from the static
-        # source and therefore cannot carry a UNIQUE constraint.
+        # product_id is unique here by construction (we grouped before writing).
+        # ensure_unique_index() is safe to call because we know there are no
+        # duplicate product_ids in this table.
+        ensure_unique_index("raw_events_aggregated", "product_id", conn)
         n_upserted = upsert_df(product_agg, "raw_events_aggregated", "product_id", conn)
         logger.info(f"raw_events_aggregated: {n_upserted} product rows upserted")
 

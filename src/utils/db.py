@@ -67,12 +67,10 @@ def upsert_df(df: pd.DataFrame, table_name: str, conflict_col: str, conn) -> int
     # Ensure table exists with correct schema (zero rows)
     df.head(0).to_sql(table_name, conn, if_exists="append", index=False)
 
-    # SQLite requires a UNIQUE or PRIMARY KEY constraint for ON CONFLICT to work.
-    # Create a unique index idempotently — safe to call on every upsert.
-    conn.execute(text(
-        f"CREATE UNIQUE INDEX IF NOT EXISTS "
-        f"uq_{table_name}_{conflict_col} ON {table_name}({conflict_col})"
-    ))
+    # Caller is responsible for ensuring a UNIQUE or PRIMARY KEY constraint
+    # exists on conflict_col before calling this function.  The helper
+    # ensure_unique_index() below can be used to create it idempotently on
+    # tables whose data is guaranteed unique (e.g. raw_events_aggregated).
 
     cols         = list(df.columns)
     col_list     = ", ".join(cols)
@@ -89,3 +87,15 @@ def upsert_df(df: pd.DataFrame, table_name: str, conflict_col: str, conn) -> int
 
     conn.execute(sql, df.to_dict(orient="records"))
     return len(df)
+
+
+def ensure_unique_index(table_name: str, col: str, conn) -> None:
+    """
+    Create a UNIQUE INDEX on table_name(col) if it does not already exist.
+    Only call this when the table data is guaranteed to have no duplicate
+    values in col — e.g. raw_events_aggregated after product-level aggregation.
+    """
+    conn.execute(text(
+        f"CREATE UNIQUE INDEX IF NOT EXISTS "
+        f"uq_{table_name}_{col} ON {table_name}({col})"
+    ))
