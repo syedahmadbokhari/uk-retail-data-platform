@@ -76,6 +76,12 @@ Each step only runs if there is something new to process. Every step is safe to 
 
 ## Architecture
 
+![Architecture Diagram](assets/architecture_diagram.png)
+*End-to-end data platform: event ingestion → incremental processing → transformation layers → machine learning → dashboard serving*
+
+<details>
+<summary>View detailed pipeline flow (ASCII)</summary>
+
 ```
 ┌─────────────────────────────────────────────────────────────────┐
 │                     EVENT GENERATION LAYER                       │
@@ -139,6 +145,8 @@ Each step only runs if there is something new to process. Every step is safe to 
               │  STREAMLIT DASHBOARD   │
               └────────────────────────┘
 ```
+
+</details>
 
 ### Layer Explanations
 
