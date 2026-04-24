@@ -346,23 +346,8 @@ Total runtime on a 1,650-event dataset: **under 1 second**.
 
 ## Airflow DAG — 10 Tasks
 
-```
-[generate_events, ingest_raw] ──► ingest_incremental
-                                          │
-                                  validate_raw_layer
-                                          │
-                                    clean_tables
-                                          │
-                                   build_analytics
-                                          │
-                                       dbt_run
-                                          │
-                                   validate_marts
-                                          │
-                                   build_features
-                                          │
-                              build_similarity_matrix
-```
+![Airflow DAG](assets/DAG_diagram.png)
+*10-task Airflow DAG: parallel ingestion → quality gates → transformation → ML layer*
 
 - `generate_events` and `ingest_raw` run **in parallel** — they are independent sources
 - Two quality gates abort downstream tasks if row counts or null rates exceed thresholds
