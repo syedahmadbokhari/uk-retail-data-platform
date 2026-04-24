@@ -162,18 +162,24 @@ st.markdown(
 )
 
 
-@st.cache_resource(show_spinner=False)
+def _build_if_needed() -> bool:
+    """Build similarity model if pkl is missing. Returns True when model is available."""
+    if os.path.exists(SIMILARITY_PATH):
+        return True
+    with st.spinner("Building recommendation model — first run only, takes ~5 seconds…"):
+        try:
+            from src.features.build_features import build_features
+            from src.recommender import build_similarity_matrix
+            build_features()
+            build_similarity_matrix()
+        except Exception as e:
+            st.error(f"Could not build recommendation model: {e}")
+            return False
+    return os.path.exists(SIMILARITY_PATH)
+
+
+@st.cache_resource(show_spinner="Loading recommendation model…")
 def _load_artifact():
-    if not os.path.exists(SIMILARITY_PATH):
-        with st.spinner("Building recommendation model — first run only, takes ~5 seconds…"):
-            try:
-                from src.features.build_features import build_features
-                from src.recommender import build_similarity_matrix
-                build_features()
-                build_similarity_matrix()
-            except Exception as e:
-                st.error(f"Could not build recommendation model: {e}")
-                return None
     if not os.path.exists(SIMILARITY_PATH):
         return None
     with open(SIMILARITY_PATH, "rb") as f:
@@ -206,7 +212,7 @@ def _get_recommendations(
     return pd.DataFrame(rows)
 
 
-artifact = _load_artifact()
+artifact = _load_artifact() if _build_if_needed() else None
 
 if artifact is None:
     st.info("⚠️ Recommendation model could not be loaded. Check the logs for details.")
