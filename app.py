@@ -158,13 +158,22 @@ st.divider()
 # ── Recommendation engine ──────────────────────────────────────────────────────
 st.header("🎯 Product Recommendations")
 st.markdown(
-    "Content-based filtering using price, discount, revenue, rating, and review count. "
-    "Run `python pipeline/run_pipeline.py` once to build the model."
+    "Content-based filtering using price, discount, revenue, rating, and review count."
 )
 
 
-@st.cache_resource(show_spinner="Loading recommendation model…")
+@st.cache_resource(show_spinner=False)
 def _load_artifact():
+    if not os.path.exists(SIMILARITY_PATH):
+        with st.spinner("Building recommendation model — first run only, takes ~5 seconds…"):
+            try:
+                from src.features.build_features import build_features
+                from src.recommender import build_similarity_matrix
+                build_features()
+                build_similarity_matrix()
+            except Exception as e:
+                st.error(f"Could not build recommendation model: {e}")
+                return None
     if not os.path.exists(SIMILARITY_PATH):
         return None
     with open(SIMILARITY_PATH, "rb") as f:
@@ -200,10 +209,7 @@ def _get_recommendations(
 artifact = _load_artifact()
 
 if artifact is None:
-    st.info(
-        "⚙️ Recommendation model not built yet.  \n"
-        "Run **`python pipeline/run_pipeline.py`** from the project root to generate it."
-    )
+    st.info("⚠️ Recommendation model could not be loaded. Check the logs for details.")
 else:
     feat_df    = artifact["df"]
     sim_matrix = artifact["matrix"]
