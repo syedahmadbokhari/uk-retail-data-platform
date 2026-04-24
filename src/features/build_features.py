@@ -9,7 +9,10 @@ from src.utils.validation import validate
 
 logger = get_logger("features.build")
 
-# One row per product: aggregate finance metrics, join reviews + brand
+# One row per product: aggregate finance metrics, join reviews + brand.
+# Note: r.rating is NOT wrapped in COALESCE — NULLs are intentionally
+# preserved so Python can impute with the column median rather than
+# treating unknown ratings as 0 (which would distort cosine similarity).
 _FEATURE_QUERY = """
 WITH product_finance AS (
     SELECT product_id,
@@ -33,7 +36,7 @@ SELECT
     f.listing_price,
     f.discount,
     f.revenue,
-    COALESCE(r.rating,       0) AS rating,
+    r.rating,
     COALESCE(r.review_count, 0) AS review_count
 FROM product_finance f
 JOIN clean_info   i ON f.product_id = i.product_id
@@ -53,11 +56,27 @@ def build_features() -> pd.DataFrame:
 
     logger.info(f"Raw join result: {len(df)} products")
 
-    # Fill remaining nulls
+    # Impute with median rather than 0.
+    # Filling with 0 collapses feature vectors: products with no price data
+    # all become identical on that dimension, driving cosine similarity to ~100%.
+    df["listing_price"] = df["listing_price"].fillna(df["listing_price"].median())
+    df["review_count"]  = df["review_count"].fillna(df["review_count"].median())
     df["rating"]        = df["rating"].fillna(df["rating"].median())
-    df["review_count"]  = df["review_count"].fillna(0)
-    df["listing_price"] = df["listing_price"].fillna(0)
-    df["discount"]      = df["discount"].fillna(0)
+    df["discount"]      = df["discount"].fillna(0)  # 0 is a valid default for discount
+
+    # Drop rows where listing_price is still <= 0 after imputation.
+    # A £0 price cannot be real — these are corrupted source rows that would
+    # cluster together and produce artificially high similarity scores.
+    n_before = len(df)
+    df = df[df["listing_price"] > 0].reset_index(drop=True)
+    n_dropped = n_before - len(df)
+    if n_dropped:
+        logger.warning(f"Dropped {n_dropped} rows with listing_price <= 0 (corrupted source data)")
+
+    # Fail fast if any invariant is violated before writing to DB
+    assert df["listing_price"].min() > 0,          "listing_price must be positive after cleaning"
+    assert df["listing_price"].isna().sum() == 0,  "listing_price must have no nulls"
+    assert df["review_count"].isna().sum() == 0,   "review_count must have no nulls"
 
     # Label-encode brand
     le = LabelEncoder()

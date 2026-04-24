@@ -1,5 +1,4 @@
 import os
-import pickle
 import sqlite3
 import sys
 
@@ -193,19 +192,34 @@ def _get_recommendations(
         return pd.DataFrame()
     idx    = matches[0]
     scores = sorted(enumerate(sim_matrix[idx]), key=lambda x: x[1], reverse=True)
-    top    = [(i, s) for i, s in scores if i != idx][:top_n]
-    rows   = []
-    for i, score in top:
+
+    # Fetch extra candidates before deduplication: the same product_name can
+    # appear under multiple product_ids (different colourways), so we need a
+    # larger pool to guarantee top_n unique names after deduplication.
+    candidates = [(i, s) for i, s in scores if i != idx][:top_n * 3]
+
+    rows = []
+    for i, score in candidates:
         r = df.iloc[i]
         rows.append({
             "Product":     r["product_name"],
             "Brand":       r["brand"],
-            "Price (£)":    f"{r['listing_price']:.0f}",
+            "Price (£)":   f"{r['listing_price']:.0f}",
             "Rating":      f"{r['rating']:.2f}",
-            "Revenue (£)":  f"{r['revenue']:,.0f}",
+            "Revenue (£)": f"{r['revenue']:,.0f}",
             "Similarity":  f"{score:.1%}",
+            "_score":      score,
         })
-    return pd.DataFrame(rows)
+
+    result = pd.DataFrame(rows)
+    # Keep one row per product name — the highest-similarity entry
+    result = (result
+              .sort_values("_score", ascending=False)
+              .drop_duplicates(subset="Product", keep="first")
+              .drop(columns=["_score"])
+              .head(top_n)
+              .reset_index(drop=True))
+    return result
 
 
 artifact = _load_artifact()
