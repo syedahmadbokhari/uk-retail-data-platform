@@ -41,6 +41,87 @@ The result is a full-stack data platform covering event ingestion, layered trans
 
 ---
 
+## 📊 Business Insights & Recommendations
+
+<div align="center">
+  <img src="assets/revenue_by_brand.png" width="48%" alt="Revenue by Brand"/>
+  <img src="assets/top_products.png" width="48%" alt="Top Products by Revenue"/>
+</div>
+<div align="center">
+  <img src="assets/monthly_trend.png" width="60%" alt="Monthly Traffic Trend"/>
+</div>
+
+*Left: Revenue split by brand — Adidas dominates with Nike commanding a premium price point. Right: Top 10 products by total revenue. Bottom: Monthly traffic trend showing peak in 2019.*
+
+---
+
+### Revenue is highly concentrated in Adidas
+Adidas accounts for over 93% of products and the majority of revenue. **Action:** Diversify the brand mix or negotiate improved margin terms with Adidas given the platform's dependency on a single supplier.
+
+### Discounts are driving volume but at a cost
+Discounted products generate more total revenue than full-price items, meaning discount-led volume is the primary commercial lever. **Action:** Analyse revenue per unit (not total revenue) by discount tier to identify whether promotions are driving genuine incremental sales or cannibalising full-price purchases.
+
+### Traffic peaked and has since declined
+Monthly website visits peaked in 2019. **Action:** Cross-reference traffic decline with discount frequency — if promotional periods are the only traffic drivers, the business is training customers to wait for sales rather than buy at full price.
+
+### Product data quality issues exist at scale
+11% of products had corrupted pricing data. **Action:** Implement upstream data validation at the point of entry rather than relying on the pipeline to detect and discard bad rows downstream.
+
+---
+
+## ❓ Key Business Questions Answered
+
+- Which products are generating the most revenue, and how concentrated is that revenue?
+- Are discounts increasing total revenue or reducing margins by cannibalising full-price sales?
+- Which brands dominate the catalogue and what does that mean for supplier dependency?
+- How does website traffic trend across months — and does it correlate with promotional activity?
+- Do higher-rated products generate more revenue than lower-rated ones?
+- Which products are underperforming relative to their listing price?
+
+---
+
+## 🧠 SQL Analysis
+
+This project answers business questions using SQL queries built on top of the analytics layer. The pipeline pre-aggregates data into five analytics tables — the queries below run against those tables for fast, repeatable results.
+
+```sql
+-- Top 10 products by revenue with revenue rank
+SELECT product_name,
+       SUM(modified_revenue)                                         AS total_revenue,
+       RANK() OVER (ORDER BY SUM(modified_revenue) DESC)            AS revenue_rank
+FROM finance f
+JOIN info i ON f.product_id = i.product_id
+GROUP BY i.product_name
+ORDER BY revenue_rank
+LIMIT 10;
+```
+
+```sql
+-- Discount impact: revenue share by discount category
+SELECT CASE WHEN modified_discount > 0 THEN 'Discounted' ELSE 'Full Price' END AS category,
+       SUM(modified_revenue)                                                      AS total_revenue,
+       ROUND(SUM(modified_revenue) * 100.0 / SUM(SUM(modified_revenue)) OVER (), 1) AS pct_of_total
+FROM finance
+GROUP BY category
+ORDER BY total_revenue DESC;
+```
+
+```sql
+-- Monthly traffic with month-over-month change
+SELECT month,
+       visit_count,
+       visit_count - LAG(visit_count) OVER (ORDER BY month) AS mom_change
+FROM (
+    SELECT SUBSTR(modified_last_visited, 1, 7) AS month,
+           COUNT(*) AS visit_count
+    FROM traffic
+    GROUP BY month
+) monthly
+ORDER BY month;
+```
+
+---
+
 ## The Problem This Solves
 
 ### The situation
@@ -204,34 +285,6 @@ The re-run row confirms idempotency — running the pipeline twice produces the 
 **Problem:** Production pipelines run on PostgreSQL. Local development and CI should not require a running database server.
 
 **Solution:** `src/utils/db.py` checks for a `DB_HOST` environment variable at runtime. When present it connects to PostgreSQL via psycopg2. When absent it falls back to a local SQLite file. The same SQL, the same ORM calls, and the same tests work in both environments without any code changes.
-
----
-
-## Business Insights and Recommended Actions
-
-<div align="center">
-  <img src="assets/revenue_by_brand.png" width="48%" alt="Revenue by Brand"/>
-  <img src="assets/top_products.png" width="48%" alt="Top Products by Revenue"/>
-</div>
-<div align="center">
-  <img src="assets/monthly_trend.png" width="60%" alt="Monthly Traffic Trend"/>
-</div>
-
-*Left: Revenue split by brand — Adidas dominates with Nike commanding a premium price point. Right: Top 10 products by total revenue. Bottom: Monthly traffic trend showing peak in 2019.*
-
----
-
-### Revenue is highly concentrated in Adidas
-Adidas accounts for over 93% of products and the majority of revenue. **Action:** Diversify the brand mix or negotiate improved margin terms with Adidas given the platform's dependency on a single supplier.
-
-### Discounts are driving volume but at a cost
-Discounted products generate more total revenue than full-price items, meaning discount-led volume is the primary commercial lever. **Action:** Analyse revenue per unit (not total revenue) by discount tier to identify whether promotions are driving genuine incremental sales or cannibalising full-price purchases.
-
-### Traffic peaked and has since declined
-Monthly website visits peaked in 2019. **Action:** Cross-reference traffic decline with discount frequency — if promotional periods are the only traffic drivers, the business is training customers to wait for sales rather than buy at full price.
-
-### Product data quality issues exist at scale
-11% of products had corrupted pricing data. **Action:** Implement upstream data validation at the point of entry rather than relying on the pipeline to detect and discard bad rows downstream.
 
 ---
 
