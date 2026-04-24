@@ -4,18 +4,22 @@
 
 ![CI](https://github.com/syedahmadbokhari/sql-data-analysis/actions/workflows/ci.yml/badge.svg)
 
-**Stack:** Python · SQL · Apache Airflow · PostgreSQL · dbt · Docker · scikit-learn · Streamlit · pytest · GitHub Actions
+**Stack:** Python · SQL · Apache Airflow · PostgreSQL · dbt · Docker · Power BI · scikit-learn · Streamlit · pytest · GitHub Actions
 
 ---
 
-## Live Dashboard
+## Power BI Dashboard
+
+![Power BI Dashboard](assets/dashboard_screenshot.png)
+*Revenue KPIs, brand share, discount category analysis, traffic trends, and top 10 products — built in Power BI on top of the pipeline output*
+
+---
+
+## Live Streamlit App
 
 **[View the live Streamlit app](https://sql-data-analysis-bisxvwilgc3ntxhken76wy.streamlit.app/)**
 
-## Power BI Screenshot
-
-![Streamlit Dashboard](assets/dashboard_screenshot.png)
-*Revenue KPIs, brand analysis, discount impact, traffic trends, and product recommendations — all in one live dashboard*
+*Interactive dashboard with product recommendation engine — deployed on Streamlit Cloud*
 
 ---
 
