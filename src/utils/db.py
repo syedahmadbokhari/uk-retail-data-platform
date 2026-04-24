@@ -56,18 +56,28 @@ def upsert_df(df: pd.DataFrame, table_name: str, conflict_col: str, conn) -> int
     Uses INSERT ... ON CONFLICT (conflict_col) DO UPDATE SET ..., which works
     on both PostgreSQL and SQLite 3.24+ (Python 3.8+ ships with SQLite >= 3.31).
 
+    A UNIQUE INDEX on conflict_col is created automatically if it does not yet
+    exist — this is required by SQLite for ON CONFLICT to resolve correctly.
+
     Returns the number of rows processed.
     """
     if df.empty:
         return 0
 
-    # Ensure the table exists with the correct schema (zero rows inserted)
+    # Ensure table exists with correct schema (zero rows)
     df.head(0).to_sql(table_name, conn, if_exists="append", index=False)
 
-    cols = list(df.columns)
-    col_list    = ", ".join(cols)
+    # SQLite requires a UNIQUE or PRIMARY KEY constraint for ON CONFLICT to work.
+    # Create a unique index idempotently — safe to call on every upsert.
+    conn.execute(text(
+        f"CREATE UNIQUE INDEX IF NOT EXISTS "
+        f"uq_{table_name}_{conflict_col} ON {table_name}({conflict_col})"
+    ))
+
+    cols         = list(df.columns)
+    col_list     = ", ".join(cols)
     placeholders = ", ".join(f":{c}" for c in cols)
-    update_set  = ", ".join(
+    update_set   = ", ".join(
         f"{c} = excluded.{c}" for c in cols if c != conflict_col
     )
 

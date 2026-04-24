@@ -69,11 +69,43 @@ def _discount_impact(conn) -> pd.DataFrame:
     )
 
 
+def _event_revenue(conn) -> pd.DataFrame:
+    """
+    Revenue summary derived from synthetic sales events.
+    Reads raw_events_aggregated — only exists after at least one generator run.
+    Falls back to an empty DataFrame so the main pipeline never errors.
+    """
+    try:
+        df = pd.read_sql(
+            """
+            SELECT e.product_id,
+                   i.modified_product_name AS product_name,
+                   b.modified_brand        AS brand,
+                   e.modified_revenue      AS event_revenue,
+                   e.modified_sale_price   AS avg_price,
+                   e.modified_discount     AS avg_discount
+            FROM  raw_events_aggregated e
+            LEFT JOIN clean_info   i ON e.product_id = i.product_id
+            LEFT JOIN clean_brands b ON e.product_id = b.product_id
+            ORDER BY event_revenue DESC
+            """,
+            conn,
+        )
+        df["revenue_rank"] = (
+            df["event_revenue"].rank(method="min", ascending=False).astype(int)
+        )
+        return df
+    except Exception:
+        logger.info("  analytics_event_revenue: raw_events_aggregated not yet populated — skipped")
+        return pd.DataFrame()
+
+
 _BUILDERS = {
     "analytics_brand_revenue":   _brand_revenue,
     "analytics_product_revenue": _product_revenue,
     "analytics_monthly_traffic": _monthly_traffic,
     "analytics_discount_impact": _discount_impact,
+    "analytics_event_revenue":   _event_revenue,
 }
 
 
@@ -84,6 +116,8 @@ def build_analytics():
     with get_connection() as conn:
         for name, builder in _BUILDERS.items():
             df = builder(conn)
+            if df.empty:
+                continue
             df.to_sql(name, conn, if_exists="replace", index=False)
             logger.info(f"  {name}: {len(df)} rows")
 

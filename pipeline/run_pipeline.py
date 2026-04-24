@@ -9,24 +9,27 @@ import os
 import sys
 import time
 
-# Ensure project root is on the path so src.* imports resolve
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from src.utils.logger import get_logger
-from src.etl.ingest import ingest_raw
-from src.etl.clean import clean_tables
-from src.etl.aggregate import build_analytics
-from src.features.build_features import build_features
-from src.recommender import build_similarity_matrix
+from src.data_generator.generate_events import generate_events
+from src.etl.ingest                      import ingest_raw
+from src.etl.ingest_events               import ingest_incremental
+from src.etl.clean                       import clean_tables
+from src.etl.aggregate                   import build_analytics
+from src.features.build_features         import build_features
+from src.recommender                     import build_similarity_matrix
 
 logger = get_logger("pipeline")
 
 STEPS = [
-    ("1/5  Ingest       raw layer",      ingest_raw),
-    ("2/5  Clean        clean layer",    clean_tables),
-    ("3/5  Aggregate    analytics layer",build_analytics),
-    ("4/5  Features     feature table",  build_features),
-    ("5/5  Similarity   model artifact", build_similarity_matrix),
+    ("1/7  Generate     synthetic events",     lambda: generate_events(n_events=200)),
+    ("2/7  Ingest       static source tables", ingest_raw),
+    ("3/7  Ingest       new events (incr.)",   ingest_incremental),
+    ("4/7  Clean        clean layer",          clean_tables),
+    ("5/7  Aggregate    analytics layer",      build_analytics),
+    ("6/7  Features     feature table",        build_features),
+    ("7/7  Similarity   model artifact",       build_similarity_matrix),
 ]
 
 

@@ -1,11 +1,11 @@
 # 📊 Retail Data Platform — Production Data Engineering System
-### SQL • Python • Airflow • PostgreSQL • Scikit-learn • Streamlit • Power BI • pytest • CI/CD
+### SQL • Python • Airflow • PostgreSQL • dbt • Docker • Scikit-learn • Streamlit • pytest • CI/CD
 
 ![CI](https://github.com/syedahmadbokhari/sql-data-analysis/actions/workflows/ci.yml/badge.svg)
 
-A **production-style retail data platform** that covers the full data engineering stack: structured ETL pipeline, Apache Airflow orchestration, PostgreSQL-ready database layer, content-based recommendation engine, and a 49-test pytest suite with GitHub Actions CI — all surfaced through an interactive Streamlit dashboard.
+A **production-style retail data platform** that covers the full data engineering stack: synthetic event generation, incremental ETL pipeline with watermark tracking, Apache Airflow orchestration, dbt transformation layer, PostgreSQL-ready database, content-based recommendation engine, and a 49-test pytest suite with GitHub Actions CI — all surfaced through an interactive Streamlit dashboard.
 
-Built to simulate a **real-world data engineering workflow** from raw data ingestion through to automated orchestration and product recommendations.
+Built to simulate a **real-world, always-moving data engineering system** where new sales events arrive continuously, the pipeline processes only what's new, and every run is safe to repeat.
 
 ---
 
@@ -14,45 +14,87 @@ Built to simulate a **real-world data engineering workflow** from raw data inges
 🔗 **Streamlit App**
 https://sql-data-analysis-bisxvwilgc3ntxhken76wy.streamlit.app/
 
-- Revenue KPI tracking
-- Brand performance analysis
-- Discount impact analysis
-- Monthly traffic trends
-- Top product performance
-- Revenue vs product ratings
-- **Content-based product recommendation engine**
-
----
-
-## 📊 Power BI Dashboard
-
-Executive-level dashboard designed for business stakeholders.
-
-![Dashboard](assets/dashboard_screenshot.png)
-
-- KPI cards: Total Revenue and Brand Share
-- Revenue by Brand comparison
-- Revenue by Discount Category
-- Monthly Traffic Trend
-- Top 10 Products by Revenue
-- Interactive Brand Filter
-
 ---
 
 ## 🏗️ Architecture
 
 ```
-Raw Data → Airflow DAG → raw_* → clean_* → analytics_* → features_products → similarity.pkl → Dashboard
-                ↓
-         PostgreSQL / SQLite (auto-selected via env vars)
+┌─────────────────────────────────────────────────────────────────┐
+│                     EVENT GENERATION LAYER                       │
+│                                                                  │
+│  src/data_generator/generate_events.py                          │
+│  → Generates N synthetic sales events per run                   │
+│  → Appends to fact_sales_events (UUID event_id, forward ts)     │
+└──────────────────────────┬──────────────────────────────────────┘
+                           │
+          ┌────────────────┴────────────────┐
+          ▼                                 ▼
+┌─────────────────────┐         ┌─────────────────────┐
+│  STATIC INGEST      │         │  INCREMENTAL INGEST  │
+│  ingest.py          │         │  ingest_events.py    │
+│  finance/brands/    │         │  WHERE event_ts >    │
+│  info/reviews/      │         │  last watermark      │
+│  traffic → raw_*    │         │  → raw_events_agg.   │
+└─────────────────────┘         └──────────┬──────────┘
+          │                                │
+          └────────────────┬───────────────┘
+                           ▼
+              ┌────────────────────────┐
+              │  QUALITY GATE          │
+              │  validate_raw_layer()  │
+              │  row counts, null rate │
+              └────────────┬───────────┘
+                           ▼
+              ┌────────────────────────┐
+              │  CLEAN LAYER           │
+              │  clean.py              │
+              │  raw_* → clean_*       │
+              └────────────┬───────────┘
+                           ▼
+              ┌────────────────────────┐
+              │  ANALYTICS LAYER       │
+              │  aggregate.py          │
+              │  clean_* → analytics_* │
+              │  + analytics_event_rev │
+              └────────────┬───────────┘
+                           ▼
+              ┌────────────────────────┐
+              │  dbt (PostgreSQL only) │
+              │  staging views +       │
+              │  mart tables + tests   │
+              └────────────┬───────────┘
+                           ▼
+              ┌────────────────────────┐
+              │  QUALITY GATE          │
+              │  validate_marts()      │
+              └────────────┬───────────┘
+                           ▼
+              ┌────────────────────────┐
+              │  FEATURE ENGINEERING   │
+              │  features_products     │
+              └────────────┬───────────┘
+                           ▼
+              ┌────────────────────────┐
+              │  RECOMMENDATION MODEL  │
+              │  similarity.pkl        │
+              │  cosine similarity     │
+              └────────────┬───────────┘
+                           ▼
+              ┌────────────────────────┐
+              │  STREAMLIT DASHBOARD   │
+              └────────────────────────┘
 ```
+
+### Data Layer Summary
 
 | Layer | Tables | Purpose |
 |-------|--------|---------|
-| Raw | `raw_finance`, `raw_brands`, `raw_info`, `raw_reviews`, `raw_traffic` | Exact copy of source — never modified |
+| Events | `fact_sales_events` | Append-only event log — one row per sale |
+| Raw | `raw_finance`, `raw_brands`, `raw_info`, `raw_reviews`, `raw_traffic`, `raw_events_aggregated` | Exact source copies + aggregated event data |
 | Clean | `clean_finance`, `clean_brands`, `clean_info`, `clean_reviews`, `clean_traffic` | Validated, typed, null-handled |
-| Analytics | `analytics_brand_revenue`, `analytics_product_revenue`, `analytics_monthly_traffic`, `analytics_discount_impact` | Pre-computed business metrics |
+| Analytics | `analytics_brand_revenue`, `analytics_product_revenue`, `analytics_monthly_traffic`, `analytics_discount_impact`, `analytics_event_revenue` | Pre-computed business metrics |
 | Features | `features_products` | ML-ready product feature table |
+| Watermarks | `pipeline_watermarks`, `event_ingestion_watermark` | Incremental state tracking |
 | Model | `models/similarity.pkl` | Cosine similarity matrix (3,120 × 3,120) |
 
 ---
@@ -62,50 +104,52 @@ Raw Data → Airflow DAG → raw_* → clean_* → analytics_* → features_prod
 ```
 project/
 │
-├── .github/
-│   └── workflows/
-│       └── ci.yml                  # GitHub Actions — runs pytest on every push
+├── .github/workflows/ci.yml          # GitHub Actions — pytest on every push
+├── docker-compose.yml                # Airflow + Postgres full stack
+├── docker/
+│   ├── Dockerfile.airflow            # Airflow image with dbt-postgres
+│   └── init-db.sql                   # Creates 'retail' DB on first Postgres boot
 │
 ├── data/
-│   └── retailDB.sqlite             # Source DB + all pipeline layers
+│   └── retailDB.sqlite               # Source DB + all pipeline layers
 │
-├── models/
-│   └── similarity.pkl              # Generated by pipeline (gitignored)
+├── dbt/
+│   ├── dbt_project.yml
+│   ├── profiles.yml
+│   └── models/
+│       ├── staging/                  # Views: stg_finance/brands/info/reviews/traffic
+│       └── marts/                    # Tables: mart_brand/product/traffic/discount
 │
 ├── src/
+│   ├── data_generator/
+│   │   └── generate_events.py        # ★ NEW — synthetic sales event generator
 │   ├── utils/
-│   │   ├── db.py                   # SQLAlchemy dual-mode: PostgreSQL or SQLite
-│   │   ├── logger.py               # Structured logging (console + file)
-│   │   └── validation.py          # Row count, null, duplicate checks
+│   │   ├── db.py                     # SQLAlchemy dual-mode + upsert_df()
+│   │   ├── logger.py                 # Structured logging
+│   │   ├── validation.py             # Row count, null, duplicate checks
+│   │   └── watermark.py              # Pipeline watermark tracking
 │   ├── etl/
-│   │   ├── ingest.py               # Source → raw_* tables
-│   │   ├── clean.py                # raw_* → clean_* tables
-│   │   └── aggregate.py           # clean_* → analytics_* tables
+│   │   ├── ingest.py                 # Static source → raw_* (incremental, UPSERT)
+│   │   ├── ingest_events.py          # ★ NEW — fact_sales_events → raw_events_aggregated
+│   │   ├── clean.py                  # raw_* → clean_*
+│   │   └── aggregate.py              # clean_* → analytics_* (incl. event revenue)
 │   ├── features/
-│   │   └── build_features.py      # Builds features_products table + CSV
-│   └── recommender.py             # Cosine similarity model + get_recommendations()
+│   │   └── build_features.py         # features_products table
+│   └── recommender.py                # Cosine similarity model
 │
 ├── pipeline/
-│   ├── run_pipeline.py            # Script orchestrator (local dev)
+│   ├── run_pipeline.py               # Local script runner (7 steps)
 │   └── dags/
-│       └── retail_pipeline.py    # Apache Airflow DAG
+│       └── retail_pipeline.py        # Airflow DAG (10 tasks)
 │
 ├── tests/
-│   ├── test_clean.py              # 24 unit tests for ETL cleaning logic
-│   ├── test_features.py           # 12 unit tests for feature engineering
-│   └── test_recommender.py       # 13 unit tests for recommendation engine
+│   ├── test_clean.py                 # 24 unit tests
+│   ├── test_features.py              # 12 unit tests
+│   └── test_recommender.py           # 13 unit tests
 │
-├── outputs/
-│   └── features_products.csv     # Feature table export
-│
-├── logs/
-│   └── pipeline.log              # Execution log (gitignored)
-│
-├── assets/                        # Dashboard screenshots
-├── app.py                         # Streamlit dashboard
-├── pytest.ini                     # pytest config
-├── requirements.txt               # Runtime dependencies
-└── requirements-dev.txt           # Dev/test dependencies
+├── app.py                            # Streamlit dashboard
+├── .env.example                      # Credentials template
+└── requirements.txt
 ```
 
 ---
@@ -113,239 +157,188 @@ project/
 ## ⚡ Quick Start
 
 ```bash
-# Install runtime dependencies
 pip install -r requirements.txt
-
-# Install dev/test dependencies
 pip install -r requirements-dev.txt
 
-# Run the full pipeline (SQLite — no setup required)
+# Run the full incremental pipeline
 python pipeline/run_pipeline.py
+
+# Or generate events and ingest independently
+python -m src.data_generator.generate_events --n 500
+python -c "from src.etl.ingest_events import ingest_incremental; ingest_incremental()"
 
 # Launch the dashboard
 streamlit run app.py
 
-# Run the test suite
+# Run tests
 pytest
 ```
 
-### PostgreSQL Setup (optional)
+### Docker (full stack — Airflow + PostgreSQL)
 
 ```bash
-# Set environment variables to switch from SQLite to PostgreSQL
-export DB_HOST=localhost
-export DB_NAME=retail
-export DB_USER=postgres
-export DB_PASSWORD=yourpassword
-
-# Run pipeline — automatically connects to Postgres
-python pipeline/run_pipeline.py
+cp .env.example .env
+docker compose up --build
+# Airflow UI → http://localhost:8080  (admin / admin)
+# Trigger DAG: retail_pipeline
 ```
 
-### Airflow Setup (optional)
+---
+
+## 🔄 Synthetic Data Generator
+
+**File:** `src/data_generator/generate_events.py`
+
+Generates realistic retail sales events and appends them to `fact_sales_events`:
+
+| Column | Type | Description |
+|--------|------|-------------|
+| `event_id` | TEXT (UUID) | Unique event identifier |
+| `product_id` | TEXT | Drawn from existing product catalogue |
+| `price` | REAL | £49.99 – £249.99 (athletic footwear range) |
+| `discount` | REAL | 0 – 55% |
+| `quantity` | INTEGER | 1 – 5 units |
+| `revenue` | REAL | `price × (1 − discount) × quantity` |
+| `event_timestamp` | TIMESTAMP | Current time + 0–999 ms forward jitter |
+
+**Key design decision:** timestamps use forward-only jitter (0–999 ms ahead of `NOW()`). This guarantees every batch sits strictly after the previous batch's watermark — the incremental ingest can never miss or double-count events.
 
 ```bash
-pip install apache-airflow
+# Generate 200 events (default)
+python -m src.data_generator.generate_events
 
-export AIRFLOW_HOME=~/airflow
-airflow db init
-
-# Point Airflow at the dags folder
-export AIRFLOW__CORE__DAGS_FOLDER=/path/to/project/pipeline/dags
-
-airflow scheduler &
-airflow webserver &
-# Open http://localhost:8080 — trigger "retail_pipeline" DAG
+# Generate 500 events with a fixed seed
+python -m src.data_generator.generate_events --n 500 --seed 42
 ```
 
 ---
 
-## 🧱 1. ETL Pipeline
+## ⚡ Incremental Pipeline
 
-### Ingest
-Copies all five source tables into `raw_*` staging tables. Acts as an immutable snapshot — source tables are never modified.
+**File:** `src/etl/ingest_events.py`
 
-### Clean
-Applies table-specific transformations:
+Reads only NEW events from `fact_sales_events` since the last successful run:
 
-| Table | Transformations |
-|-------|----------------|
-| **finance** | Drop null revenue, clip discount to `[0, 1]`, fill null prices with 0 |
-| **brands** | Drop null brands, strip whitespace, title-case |
-| **info** | Drop null product names, strip whitespace |
-| **reviews** | Convert European decimal ratings (`"3,3"` → `3.3`), clip to `[0, 5]` |
-| **traffic** | Drop null/empty visit timestamps |
+```
+1. Read max_event_ts from event_ingestion_watermark
+2. SELECT * FROM fact_sales_events WHERE event_timestamp > max_event_ts
+3. Aggregate new events to product level (SUM revenue, AVG price/discount)
+4. UPSERT into raw_events_aggregated ON CONFLICT (product_id) DO UPDATE
+5. Advance watermark to max(event_timestamp) of processed batch
+```
 
-59 null/garbage rows removed → **3,120 clean products**.
+**Idempotency guarantee:** re-running with no new events processes 0 rows and leaves all tables unchanged.
 
-### Aggregate
-Four analytics tables built from clean data:
+### Demonstrated Results
 
-- `analytics_brand_revenue` — brand totals, revenue share %
-- `analytics_product_revenue` — product totals + revenue rank
-- `analytics_monthly_traffic` — monthly visit counts
-- `analytics_discount_impact` — revenue split by discount status
+```
+BASELINE   fact_sales_events:    0 rows  |  watermark: none (first run)
+
+RUN 1      generated 200 events  →  processed 200  |  total: 200
+           fact_sales_events:  200 rows  |  raw_events_aggregated: 193 products
+
+RUN 2      generated 150 events  →  processed 150  |  total: 350
+           fact_sales_events:  350 rows  |  raw_events_aggregated: 333 products
+
+RUN 3      generated 100 events  →  processed 100  |  total: 450
+           fact_sales_events:  450 rows  |  raw_events_aggregated: 425 products
+
+RE-RUN     no new events         →  processed   0  (idempotency confirmed ✓)
+```
 
 ---
 
-## ✈️ 2. Apache Airflow Orchestration
-
-The pipeline is defined as a DAG in `pipeline/dags/retail_pipeline.py`, replacing the script runner with a proper workflow engine.
+## ✈️ Airflow DAG — 10 Tasks
 
 ```
-ingest_raw → clean_tables → build_analytics → build_features → build_similarity_matrix
+[generate_events, ingest_raw] ──► ingest_incremental
+                                          │
+                                  validate_raw_layer
+                                          │
+                                    clean_tables
+                                          │
+                                   build_analytics
+                                          │
+                                       dbt_run
+                                          │
+                                   validate_marts
+                                          │
+                                   build_features
+                                          │
+                              build_similarity_matrix
 ```
 
-Each step is a `PythonOperator` wrapping the existing ETL functions — no logic was duplicated.
-
-DAG configuration:
-- `schedule_interval = "@daily"`
-- `catchup = False`
-- `retries = 1`, `retry_delay = 5 minutes`
-- Tagged: `retail`, `etl`, `ml`, `recommendations`
+- `generate_events` and `ingest_raw` run **in parallel** — independent sources
+- Two quality gates (`validate_raw_layer`, `validate_marts`) abort the run if checks fail
+- `dbt_run` executes `dbt run` + `dbt test` on PostgreSQL, gracefully skips on SQLite/CI
+- `retries=2`, `retry_delay=3min` on all tasks
 
 ---
 
-## 🗄️ 3. Database Layer — PostgreSQL + SQLite
+## 🗄️ Database Layer
 
-`src/utils/db.py` uses **SQLAlchemy** with automatic database selection:
+`src/utils/db.py` auto-selects engine based on environment:
 
 ```python
-# PostgreSQL — when DB_HOST is set
-postgresql+psycopg2://user:password@host:5432/retail
+# PostgreSQL (Docker / production)
+export DB_HOST=postgres DB_NAME=retail DB_USER=airflow DB_PASSWORD=airflow
 
-# SQLite — fallback for local dev and CI
-sqlite:///data/retailDB.sqlite
+# SQLite (local dev / CI — zero setup)
+# No env vars needed — uses data/retailDB.sqlite automatically
 ```
 
-No code changes required in the ETL layer — the context manager pattern is identical regardless of which database is active. The `engine.begin()` transaction block handles commit/rollback automatically.
+`upsert_df()` uses `INSERT ... ON CONFLICT (col) DO UPDATE SET ...` — works on both PostgreSQL and SQLite 3.24+ with automatic unique index creation.
 
 ---
 
-## 📦 4. Feature Engineering
+## 🗂️ dbt Transformation Layer
 
-**Table:** `features_products` (3,120 rows — one per product)
+Staging views clean raw data in SQL (PostgreSQL only):
 
-| Column | Source | Notes |
-|--------|--------|-------|
-| `product_id` | finance | Primary key |
-| `product_name` | info | Clean display name |
-| `brand` | brands | Adidas / Nike |
-| `brand_encoded` | brands | Label encoded (Adidas=0, Nike=1) |
-| `listing_price` | finance | AVG per product |
-| `discount` | finance | AVG discount rate |
-| `revenue` | finance | SUM revenue |
-| `rating` | reviews | AVG, median-imputed for nulls |
-| `review_count` | reviews | SUM via CTE (prevents join duplication) |
+| Model | Source | Key transformation |
+|-------|--------|-------------------|
+| `stg_finance` | `raw_finance` | Cast to float, clip discount [0,1] |
+| `stg_brands` | `raw_brands` | `INITCAP(TRIM(brand))` |
+| `stg_reviews` | `raw_reviews` | `REPLACE(',','.')` for European decimals |
+| `stg_traffic` | `raw_traffic` | Strip whitespace |
+
+Mart tables aggregate to business metrics — with `not_null`, `unique`, and `accepted_values` schema tests.
+
+```bash
+dbt run   --profiles-dir ./dbt --project-dir ./dbt
+dbt test  --profiles-dir ./dbt --project-dir ./dbt
+```
 
 ---
 
-## 🧮 5. Recommendation System
+## 🧮 Recommendation System
 
-Content-based filtering using **cosine similarity** on a 6-feature normalised product vector.
+Content-based filtering using cosine similarity on a 6-feature normalised product vector.
 
 **Features:** `brand_encoded`, `listing_price`, `discount`, `revenue`, `rating`, `review_count`
 
-```python
-from src.recommender import load_similarity_artifact, get_recommendations
-
-artifact = load_similarity_artifact()
-recs = get_recommendations(product_id, artifact["df"], artifact["matrix"], top_n=5)
-```
-
 **Example** — query: *Women's adidas Running Ultraboost 19 Shoes*
 
-| Product | Brand | Price | Rating | Similarity |
-|---------|-------|-------|--------|-----------|
-| Men's adidas Running Ultraboost 19 Shoes | Adidas | £170 | 4.8 | 99.8% |
-| Women's adidas Running Ultraboost 19 Shoes | Adidas | £160 | 4.3 | 99.8% |
-| Men's adidas Running Ultraboost 19 Shoes | Adidas | £180 | 4.7 | 99.6% |
+| Product | Similarity |
+|---------|-----------|
+| Men's adidas Running Ultraboost 19 Shoes | 99.8% |
+| Women's adidas Running Ultraboost 19 Shoes | 99.8% |
+| Men's adidas Running Ultraboost 20 Shoes | 99.6% |
 
 ---
 
-## 🧪 6. Testing
-
-**49 tests across 3 files — all passing.**
+## 🧪 Testing — 49 tests, all passing
 
 ```bash
 pytest
-# 49 passed in 2.26s
+# 49 passed
 ```
 
-| File | Tests | Coverage |
-|------|-------|----------|
-| `tests/test_clean.py` | 24 | Negative revenue, European decimal conversion (`"3,3"` → `3.3`), discount clipping, null handling for all 5 tables, output column schema |
-| `tests/test_features.py` | 12 | Column structure, null imputation, brand encoding type and distinctness, row count integrity |
-| `tests/test_recommender.py` | 13 | Result shape, self-exclusion, descending sort, score range, top result correctness, unknown product edge case |
-
-Tests use **synthetic DataFrames** — no database connection required. Mocks isolate transformation logic from I/O.
-
----
-
-## 🔄 7. GitHub Actions CI
-
-Every push to `main` triggers the test suite automatically.
-
-```yaml
-# .github/workflows/ci.yml
-on: [push, pull_request]
-jobs:
-  test:
-    runs-on: ubuntu-latest
-    steps:
-      - checkout → setup Python 3.11 → pip install → pytest
-```
-
-No Postgres service needed — the SQLite fallback in `db.py` means CI runs out of the box without any infrastructure.
-
----
-
-## 🗂️ Dataset
-
-| Table | Description | Rows |
-|-------|-------------|------|
-| **finance** | Revenue, pricing, discount | 3,179 |
-| **brands** | Brand classification (Adidas / Nike) | 3,179 |
-| **info** | Product names and descriptions | 3,179 |
-| **reviews** | Customer ratings and review counts | 3,185 |
-| **traffic** | Website visit timestamps | 3,179 |
-
----
-
-## 🔎 Key Business Insights
-
-### 1. Revenue Concentration Risk
-
-![Revenue by Brand](assets/revenue_by_brand.png)
-
-- **Adidas generates 93.49% of total revenue** (£11.5M vs Nike's £800K)
-- Single-brand dependency is a significant strategic risk
-
-### 2. Total Revenue
-- **£12.3M total retail revenue** across 3,120 clean products
-- Driven by premium running and lifestyle footwear
-
-### 3. Product Revenue Concentration
-
-![Top Products](assets/top_products.png)
-
-- Top 10 products account for a disproportionate share of revenue
-- Ultraboost and NMD lines dominate at up to £119K per product
-
-### 4. Pricing vs Discount Impact
-- Non-discounted: **£4,545 avg revenue** — higher per-unit performance
-- Discounted: **£3,584 avg revenue** but higher total volume
-- Optimal strategy: targeted discounts, protect premium pricing
-
-### 5. Social Proof Effect
-- High-review products generate **30× more avg revenue** than low-review products
-- Review generation campaigns have direct, measurable revenue impact
-
-### 6. Seasonal Trends
-
-![Monthly Trend](assets/monthly_trend.png)
-
-- Consistent traffic 2018–2020 with mid-year dips and Q4 recovery
+| File | Tests | What's covered |
+|------|-------|----------------|
+| `test_clean.py` | 24 | European decimal bug, discount clipping, null drops |
+| `test_features.py` | 12 | Column structure, brand encoding, null imputation |
+| `test_recommender.py` | 13 | Self-exclusion, sort order, score range, edge cases |
 
 ---
 
@@ -353,42 +346,42 @@ No Postgres service needed — the SQLite fallback in `db.py` means CI runs out 
 
 | Layer | Tools |
 |-------|-------|
+| **Event Generation** | Python, UUID, Pandas |
 | **Database** | PostgreSQL (production), SQLite (local / CI) |
 | **ORM / Connections** | SQLAlchemy 2.x, psycopg2 |
 | **ETL** | Python, Pandas |
-| **Orchestration** | Apache Airflow (DAG + PythonOperator) |
-| **Analytics** | SQL — CTEs, window functions, multi-table joins |
+| **Transformations** | dbt-core, dbt-postgres |
+| **Orchestration** | Apache Airflow 2.8 (DAG + PythonOperator) |
+| **Containerisation** | Docker Compose |
 | **ML / Recommendations** | scikit-learn (StandardScaler, cosine_similarity) |
 | **Testing** | pytest, unittest.mock |
 | **CI/CD** | GitHub Actions |
-| **Dashboards** | Streamlit, Power BI |
+| **Dashboard** | Streamlit, Power BI |
 | **Logging** | Python logging (console + file) |
-| **Dev Tools** | Jupyter Notebook, Git, GitHub |
 
 ---
 
 ## 💼 Skills Demonstrated
 
 **Data Engineering**
-- ETL pipeline design with staging / clean / analytics layers
-- Apache Airflow DAG authoring (PythonOperator, dependencies, retry logic)
-- PostgreSQL + SQLite via SQLAlchemy — environment-driven database selection
-- Structured logging, data validation (row count, nulls, duplicates)
+- Incremental pipeline with watermark state tracking
+- Synthetic event generation simulating real data streams
+- Idempotent UPSERT pattern safe for production re-runs
+- ETL with staging / clean / analytics / feature layers
+- Apache Airflow DAG with parallel tasks, retries, quality gates
+- PostgreSQL + SQLite via SQLAlchemy — environment-driven selection
+- dbt staging views + mart tables with schema tests
+- Docker Compose: Airflow + PostgreSQL full-stack deployment
 
 **Software Engineering**
-- Modular Python package structure (`src/utils`, `src/etl`, `src/features`)
-- 49-test pytest suite with mocking, fixtures, and edge-case coverage
+- Modular Python package structure with clean separation of concerns
+- 49-test pytest suite with mocking, fixtures, edge-case coverage
 - GitHub Actions CI — automated testing on every push
-- Clean separation of concerns — I/O isolated from transformation logic
 
 **Machine Learning & Analytics**
-- Feature engineering — label encoding, StandardScaler normalisation, CTE-based aggregation
+- Feature engineering, label encoding, StandardScaler normalisation
 - Content-based recommendation with cosine similarity
 - Advanced SQL — CTEs, window functions, aggregations
-
-**Business Intelligence**
-- KPI development and dashboard design (Streamlit + Power BI)
-- Translating analytical findings into strategic business recommendations
 
 ---
 

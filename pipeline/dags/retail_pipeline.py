@@ -1,19 +1,31 @@
 """
 Retail Data Platform — Airflow DAG
 ====================================
-Production-grade pipeline with incremental loading, dbt transformations,
-and explicit data-quality gates at every layer boundary.
+Production-grade pipeline with synthetic event generation, incremental loading,
+dbt transformations, and explicit data-quality gates at every layer boundary.
 
 Task chain
 ──────────
-  ingest_raw
-      └─► validate_raw_layer
-              └─► clean_tables
-                      └─► build_analytics      (Python, SQLite-compatible)
-                              └─► dbt_run       (Postgres only; skipped on SQLite)
-                                      └─► validate_marts
-                                              └─► build_features
-                                                      └─► build_similarity_matrix
+  generate_events          ──┐
+                             ├──► ingest_incremental ──► validate_raw_layer
+  ingest_raw (static src)  ──┘                                  │
+                                                                 ▼
+                                                          clean_tables
+                                                                 │
+                                                                 ▼
+                                                         build_analytics
+                                                                 │
+                                                                 ▼
+                                                            dbt_run
+                                                                 │
+                                                                 ▼
+                                                         validate_marts
+                                                                 │
+                                                                 ▼
+                                                         build_features
+                                                                 │
+                                                                 ▼
+                                                   build_similarity_matrix
 
 Run locally (Docker):
     docker compose up --build
@@ -39,29 +51,32 @@ if _PROJECT_ROOT not in sys.path:
 from airflow import DAG
 from airflow.operators.python import PythonOperator
 
-from src.etl.ingest              import ingest_raw
-from src.etl.clean               import clean_tables
-from src.etl.aggregate           import build_analytics
-from src.features.build_features import build_features
-from src.recommender             import build_similarity_matrix
-from src.utils.db                import get_connection
-from src.utils.logger            import get_logger
-from src.utils.validation        import ValidationError
+from src.data_generator.generate_events import generate_events
+from src.etl.ingest                      import ingest_raw
+from src.etl.ingest_events               import ingest_incremental
+from src.etl.clean                       import clean_tables
+from src.etl.aggregate                   import build_analytics
+from src.features.build_features         import build_features
+from src.recommender                     import build_similarity_matrix
+from src.utils.db                        import get_connection
+from src.utils.logger                    import get_logger
+from src.utils.validation                import ValidationError
 
 logger = get_logger("dag.retail_pipeline")
 
 # ── Default task arguments ────────────────────────────────────────────────────
 _default_args = {
     "owner":            "ahmad",
-    "retries":          1,
-    "retry_delay":      timedelta(minutes=5),
+    "retries":          2,
+    "retry_delay":      timedelta(minutes=3),
     "email_on_failure": False,
 }
 
+
 # ── Quality-gate helpers ──────────────────────────────────────────────────────
 
-def _check_table(conn, table: str, min_rows: int, critical_col: str, max_null_rate: float = 0.05):
-    """Assert row count and null rate for a single table."""
+def _check_table(conn, table: str, min_rows: int, critical_col: str,
+                 max_null_rate: float = 0.05):
     row = conn.execute(text(f"SELECT COUNT(*) FROM {table}")).scalar()
     if row < min_rows:
         raise ValidationError(f"{table}: {row} rows — expected >= {min_rows}")
@@ -72,19 +87,21 @@ def _check_table(conn, table: str, min_rows: int, critical_col: str, max_null_ra
     null_rate = nulls / row if row else 0
     if null_rate > max_null_rate:
         raise ValidationError(
-            f"{table}.{critical_col}: null rate {null_rate:.1%} exceeds threshold {max_null_rate:.0%}"
+            f"{table}.{critical_col}: null rate {null_rate:.1%} exceeds {max_null_rate:.0%}"
         )
-
-    logger.info(f"  ✓ {table}: {row} rows | {critical_col} null rate {null_rate:.1%}")
+    logger.info(f"  ✓ {table}: {row:,} rows | {critical_col} null rate {null_rate:.1%}")
 
 
 # ── DAG task functions ────────────────────────────────────────────────────────
 
+def generate_sales_events():
+    """Generate a fresh batch of 200 synthetic sales events."""
+    n = generate_events(n_events=200)
+    logger.info(f"Generated {n} events for this DAG run")
+
+
 def validate_raw_layer():
-    """
-    Quality gate after ingest.
-    Checks: minimum row counts and null rate on product_id for every raw_* table.
-    """
+    """Quality gate: raw tables have minimum rows and no critical nulls."""
     logger.info("=== Quality gate: raw layer ===")
     checks = {
         "raw_finance": ("product_id", 100),
@@ -97,43 +114,39 @@ def validate_raw_layer():
         for table, (col, min_rows) in checks.items():
             _check_table(conn, table, min_rows, col)
 
-        # Extra: warn if revenue nulls exceed 1 %
-        row = conn.execute(text("SELECT COUNT(*) FROM raw_finance")).scalar()
         rev_nulls = conn.execute(
             text("SELECT COUNT(*) FROM raw_finance WHERE modified_revenue IS NULL")
         ).scalar()
-        rev_null_rate = rev_nulls / row if row else 0
-        if rev_null_rate > 0.01:
-            logger.warning(f"raw_finance: {rev_null_rate:.1%} NULL revenue rows")
+        total = conn.execute(text("SELECT COUNT(*) FROM raw_finance")).scalar()
+        if total and (rev_nulls / total) > 0.01:
+            logger.warning(f"raw_finance: {rev_nulls} NULL revenue rows ({rev_nulls/total:.1%})")
+
+        # Confirm new events were ingested
+        try:
+            event_total = conn.execute(
+                text("SELECT COUNT(*) FROM fact_sales_events")
+            ).scalar()
+            logger.info(f"  ✓ fact_sales_events: {event_total:,} total events")
+        except Exception:
+            pass
 
     logger.info("Raw layer quality gate PASSED")
 
 
 def dbt_run():
     """
-    Execute dbt run + dbt test against the staging and mart models.
-
-    Behaviour
-    ─────────
-    • PostgreSQL mode (DB_HOST set): runs dbt — this is the production path.
-    • SQLite / CI mode: skips gracefully — dbt-postgres does not support SQLite.
-    • If dbt binary not found: logs a warning and skips (useful during local dev
-      before installing the full requirements).
+    Run dbt transformations (PostgreSQL only — gracefully skips on SQLite/CI).
     """
     if not os.getenv("DB_HOST"):
-        logger.info("SQLite mode — dbt step skipped (PostgreSQL required for dbt)")
+        logger.info("SQLite mode — dbt step skipped (PostgreSQL required)")
         return
-
     if not shutil.which("dbt"):
-        logger.warning("dbt binary not found in PATH — skipping dbt step")
+        logger.warning("dbt binary not found — skipping dbt step")
         return
 
     dbt_dir = os.path.join(_PROJECT_ROOT, "dbt")
-    base_cmd = [
-        "dbt", "--no-use-colors",
-        "--project-dir", dbt_dir,
-        "--profiles-dir", dbt_dir,
-    ]
+    base_cmd = ["dbt", "--no-use-colors",
+                "--project-dir", dbt_dir, "--profiles-dir", dbt_dir]
 
     for sub in ("run", "test"):
         cmd = base_cmd + [sub]
@@ -150,53 +163,51 @@ def dbt_run():
 
 
 def validate_marts():
-    """
-    Quality gate after dbt (or aggregate step in SQLite mode).
-    Confirms analytics tables exist and contain data.
-    """
-    logger.info("=== Quality gate: mart/analytics layer ===")
-
-    # In Postgres mode analytics are dbt mart tables; in SQLite mode they are
-    # the Python-generated analytics_* tables.  Check whichever exists.
+    """Quality gate: analytics tables have data before feature engineering runs."""
+    logger.info("=== Quality gate: analytics layer ===")
     postgres_mode = bool(os.getenv("DB_HOST"))
     tables = (
-        {
-            "marts.mart_brand_revenue":   ("brand",   1),
-            "marts.mart_product_revenue": ("product_name", 10),
-            "marts.mart_monthly_traffic": ("month",   5),
-        }
-        if postgres_mode
-        else {
-            "analytics_brand_revenue":   ("brand",   1),
-            "analytics_product_revenue": ("product_name", 10),
-            "analytics_monthly_traffic": ("month",   5),
-        }
+        {"marts.mart_brand_revenue":   ("brand",        1),
+         "marts.mart_product_revenue": ("product_name", 10),
+         "marts.mart_monthly_traffic": ("month",        5)}
+        if postgres_mode else
+        {"analytics_brand_revenue":   ("brand",        1),
+         "analytics_product_revenue": ("product_name", 10),
+         "analytics_monthly_traffic": ("month",        5)}
     )
-
     with get_connection() as conn:
         for table, (col, min_rows) in tables.items():
             _check_table(conn, table, min_rows, col)
-
-    logger.info("Mart/analytics quality gate PASSED")
+    logger.info("Analytics quality gate PASSED")
 
 
 # ── DAG definition ────────────────────────────────────────────────────────────
 with DAG(
-    dag_id           = "retail_pipeline",
-    description      = (
-        "Retail data platform: incremental ingest → quality gates → "
-        "clean → dbt transformations → feature engineering → recommendation model"
+    dag_id            = "retail_pipeline",
+    description       = (
+        "Retail data platform: synthetic event generation → incremental ingest → "
+        "quality gates → clean → dbt → feature engineering → recommendation model"
     ),
     schedule_interval = "@daily",
     start_date        = datetime(2024, 1, 1),
     catchup           = False,
     default_args      = _default_args,
-    tags              = ["retail", "etl", "dbt", "ml", "recommendations"],
+    tags              = ["retail", "etl", "incremental", "dbt", "ml"],
 ) as dag:
+
+    t_generate = PythonOperator(
+        task_id         = "generate_events",
+        python_callable = generate_sales_events,
+    )
 
     t_ingest = PythonOperator(
         task_id         = "ingest_raw",
         python_callable = ingest_raw,
+    )
+
+    t_ingest_events = PythonOperator(
+        task_id         = "ingest_incremental",
+        python_callable = ingest_incremental,
     )
 
     t_validate_raw = PythonOperator(
@@ -234,9 +245,12 @@ with DAG(
         python_callable = build_similarity_matrix,
     )
 
-    # ── Pipeline dependency chain ─────────────────────────────────────────────
+    # ── Dependency chain ──────────────────────────────────────────────────────
+    # Static source ingest and event generation run in parallel,
+    # then merge at ingest_incremental before the rest of the pipeline.
+    [t_generate, t_ingest] >> t_ingest_events
     (
-        t_ingest
+        t_ingest_events
         >> t_validate_raw
         >> t_clean
         >> t_aggregate
