@@ -24,9 +24,6 @@ st.markdown("Interactive analytics dashboard for retail revenue performance.")
 
 # ── Database connection ────────────────────────────────────────────────────────
 DB_PATH = os.path.join(_BASE_DIR, "data", "retailDB.sqlite")
-SIMILARITY_PATH = os.path.join(_BASE_DIR, "models", "similarity.pkl")
-
-
 def load_connection():
     if not os.path.exists(DB_PATH):
         st.error("❌ Database file not found.")
@@ -162,28 +159,27 @@ st.markdown(
 )
 
 
-def _build_if_needed() -> bool:
-    """Build similarity model if pkl is missing. Returns True when model is available."""
-    if os.path.exists(SIMILARITY_PATH):
-        return True
-    with st.spinner("Building recommendation model — first run only, takes ~5 seconds…"):
-        try:
-            from src.features.build_features import build_features
-            from src.recommender import build_similarity_matrix
-            build_features()
-            build_similarity_matrix()
-        except Exception as e:
-            st.error(f"Could not build recommendation model: {e}")
-            return False
-    return os.path.exists(SIMILARITY_PATH)
-
-
-@st.cache_resource(show_spinner="Loading recommendation model…")
+@st.cache_resource(show_spinner="Building recommendation model…")
 def _load_artifact():
-    if not os.path.exists(SIMILARITY_PATH):
+    try:
+        from sklearn.preprocessing import StandardScaler
+        from sklearn.metrics.pairwise import cosine_similarity
+        from src.utils.db import get_connection
+
+        FEATURE_COLS = [
+            "brand_encoded", "listing_price", "discount",
+            "revenue", "rating", "review_count",
+        ]
+        with get_connection() as _conn:
+            feat_df = pd.read_sql("SELECT * FROM features_products", _conn)
+
+        feat_df = feat_df.dropna(subset=FEATURE_COLS).reset_index(drop=True)
+        X = StandardScaler().fit_transform(feat_df[FEATURE_COLS])
+        matrix = cosine_similarity(X)
+        return {"matrix": matrix, "df": feat_df}
+    except Exception as e:
+        st.error(f"Could not build recommendation model: {e}")
         return None
-    with open(SIMILARITY_PATH, "rb") as f:
-        return pickle.load(f)
 
 
 def _get_recommendations(
@@ -202,20 +198,20 @@ def _get_recommendations(
     for i, score in top:
         r = df.iloc[i]
         rows.append({
-            "Product":          r["product_name"],
-            "Brand":            r["brand"],
-            "Price (£)":        f"{r['listing_price']:.0f}",
-            "Rating":           f"{r['rating']:.2f}",
-            "Revenue (£)":      f"{r['revenue']:,.0f}",
-            "Similarity":       f"{score:.1%}",
+            "Product":     r["product_name"],
+            "Brand":       r["brand"],
+            "Price (£)":    f"{r['listing_price']:.0f}",
+            "Rating":      f"{r['rating']:.2f}",
+            "Revenue (£)":  f"{r['revenue']:,.0f}",
+            "Similarity":  f"{score:.1%}",
         })
     return pd.DataFrame(rows)
 
 
-artifact = _load_artifact() if _build_if_needed() else None
+artifact = _load_artifact()
 
 if artifact is None:
-    st.info("⚠️ Recommendation model could not be loaded. Check the logs for details.")
+    st.info("⚠️ Recommendation model could not be loaded.")
 else:
     feat_df    = artifact["df"]
     sim_matrix = artifact["matrix"]
@@ -237,4 +233,3 @@ else:
             st.dataframe(recs, use_container_width=True, hide_index=True)
 
 # ── close connection ───────────────────────────────────────────────────────────
-conn.close()
