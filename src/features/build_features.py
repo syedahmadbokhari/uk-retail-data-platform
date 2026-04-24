@@ -1,5 +1,6 @@
 import os
 import time
+import numpy as np
 import pandas as pd
 from sklearn.preprocessing import LabelEncoder
 
@@ -61,8 +62,12 @@ def build_features() -> pd.DataFrame:
     # all become identical on that dimension, driving cosine similarity to ~100%.
     df["listing_price"] = df["listing_price"].fillna(df["listing_price"].median())
     df["review_count"]  = df["review_count"].fillna(df["review_count"].median())
-    df["rating"]        = df["rating"].fillna(df["rating"].median())
     df["discount"]      = df["discount"].fillna(0)  # 0 is a valid default for discount
+
+    # rating=0 means no rating data, not a genuine 0-star product (ratings run 1–5).
+    # Impute both NaN and 0 with the median so these products don't cluster together.
+    df["rating"] = df["rating"].replace(0, np.nan)
+    df["rating"] = df["rating"].fillna(df["rating"].median())
 
     # Drop rows where listing_price is still <= 0 after imputation.
     # A £0 price cannot be real — these are corrupted source rows that would
@@ -73,10 +78,17 @@ def build_features() -> pd.DataFrame:
     if n_dropped:
         logger.warning(f"Dropped {n_dropped} rows with listing_price <= 0 (corrupted source data)")
 
+    # Log-transform revenue before storing.
+    # Revenue is right-skewed (£0–£37,150): without log transform StandardScaler
+    # compresses all low-revenue products together, reducing their discrimination.
+    # log1p handles the zero-revenue edge case (log(0) is undefined).
+    df["revenue"] = np.log1p(df["revenue"])
+
     # Fail fast if any invariant is violated before writing to DB
     assert df["listing_price"].min() > 0,          "listing_price must be positive after cleaning"
     assert df["listing_price"].isna().sum() == 0,  "listing_price must have no nulls"
     assert df["review_count"].isna().sum() == 0,   "review_count must have no nulls"
+    assert df["rating"].isna().sum() == 0,         "rating must have no nulls after imputation"
 
     # Label-encode brand
     le = LabelEncoder()

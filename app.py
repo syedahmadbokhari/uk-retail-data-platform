@@ -206,7 +206,7 @@ def _get_recommendations(
             "Brand":       r["brand"],
             "Price (£)":   f"{r['listing_price']:.0f}",
             "Rating":      f"{r['rating']:.2f}",
-            "Revenue (£)": f"{r['revenue']:,.0f}",
+            "Revenue (£)": f"{(np.expm1(r['revenue'])):,.0f}",
             "Similarity":  f"{score:.1%}",
             "_score":      score,
         })
