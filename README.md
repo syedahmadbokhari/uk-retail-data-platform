@@ -12,6 +12,9 @@
 
 **[View the live Streamlit app](https://sql-data-analysis-bisxvwilgc3ntxhken76wy.streamlit.app/)**
 
+![Streamlit Dashboard](assets/dashboard_screenshot.png)
+*Revenue KPIs, brand analysis, discount impact, traffic trends, and product recommendations — all in one live dashboard*
+
 ---
 
 ## What This System Does
@@ -191,6 +194,18 @@ The re-run row confirms idempotency — running the pipeline twice produces the 
 ---
 
 ## Business Insights and Recommended Actions
+
+<div align="center">
+  <img src="assets/revenue_by_brand.png" width="48%" alt="Revenue by Brand"/>
+  <img src="assets/top_products.png" width="48%" alt="Top Products by Revenue"/>
+</div>
+<div align="center">
+  <img src="assets/monthly_trend.png" width="60%" alt="Monthly Traffic Trend"/>
+</div>
+
+*Left: Revenue split by brand — Adidas dominates with Nike commanding a premium price point. Right: Top 10 products by total revenue. Bottom: Monthly traffic trend showing peak in 2019.*
+
+---
 
 ### Revenue is highly concentrated in Adidas
 Adidas accounts for over 93% of products and the majority of revenue. **Action:** Diversify the brand mix or negotiate improved margin terms with Adidas given the platform's dependency on a single supplier.
