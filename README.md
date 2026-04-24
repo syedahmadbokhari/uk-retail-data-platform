@@ -12,6 +12,8 @@
 
 **[View the live Streamlit app](https://sql-data-analysis-bisxvwilgc3ntxhken76wy.streamlit.app/)**
 
+## Power BI Screenshot
+
 ![Streamlit Dashboard](assets/dashboard_screenshot.png)
 *Revenue KPIs, brand analysis, discount impact, traffic trends, and product recommendations — all in one live dashboard*
 
