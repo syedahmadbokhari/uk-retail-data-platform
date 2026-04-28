@@ -18,18 +18,20 @@ from src.etl.ingest_events               import ingest_incremental
 from src.etl.clean                       import clean_tables
 from src.etl.aggregate                   import build_analytics
 from src.features.build_features         import build_features
+from src.clustering                      import build_clusters
 from src.recommender                     import build_similarity_matrix
 
 logger = get_logger("pipeline")
 
 STEPS = [
-    ("1/7  Generate     synthetic events",     lambda: generate_events(n_events=200)),
-    ("2/7  Ingest       static source tables", ingest_raw),
-    ("3/7  Ingest       new events (incr.)",   ingest_incremental),
-    ("4/7  Clean        clean layer",          clean_tables),
-    ("5/7  Aggregate    analytics layer",      build_analytics),
-    ("6/7  Features     feature table",        build_features),
-    ("7/7  Similarity   model artifact",       build_similarity_matrix),
+    ("1/8  Generate     synthetic events",     lambda: generate_events(n_events=200)),
+    ("2/8  Ingest       static source tables", ingest_raw),
+    ("3/8  Ingest       new events (incr.)",   ingest_incremental),
+    ("4/8  Clean        clean layer",          clean_tables),
+    ("5/8  Aggregate    analytics layer",      build_analytics),
+    ("6/8  Features     feature table",        build_features),
+    ("7/8  Clustering   product clusters",     build_clusters),
+    ("8/8  Similarity   model artifact",       build_similarity_matrix),
 ]
 
 

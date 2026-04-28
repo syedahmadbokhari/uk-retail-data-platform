@@ -57,6 +57,7 @@ from src.etl.ingest_events               import ingest_incremental
 from src.etl.clean                       import clean_tables
 from src.etl.aggregate                   import build_analytics
 from src.features.build_features         import build_features
+from src.clustering                      import build_clusters
 from src.recommender                     import build_similarity_matrix
 from src.utils.db                        import get_connection
 from src.utils.logger                    import get_logger
@@ -240,6 +241,11 @@ with DAG(
         python_callable = build_features,
     )
 
+    t_cluster = PythonOperator(
+        task_id         = "cluster_products",
+        python_callable = build_clusters,
+    )
+
     t_similarity = PythonOperator(
         task_id         = "build_similarity_matrix",
         python_callable = build_similarity_matrix,
@@ -257,5 +263,6 @@ with DAG(
         >> t_dbt
         >> t_validate_marts
         >> t_features
+        >> t_cluster
         >> t_similarity
     )

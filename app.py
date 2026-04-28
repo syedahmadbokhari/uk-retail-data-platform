@@ -151,6 +151,81 @@ st.dataframe(top_products_df, use_container_width=True, hide_index=True)
 
 st.divider()
 
+# ── Cluster Analysis ───────────────────────────────────────────────────────────
+st.header("🔵 Product Cluster Analysis")
+st.markdown(
+    "K-means clustering (k=3) segments products into performance tiers based on "
+    "revenue, price, discount, and rating."
+)
+
+try:
+    cluster_df = pd.read_sql(
+        "SELECT product_id, cluster_label, log_revenue FROM analytics_product_clusters",
+        conn,
+    )
+
+    # Bar chart — product count per cluster
+    cluster_counts = (
+        cluster_df["cluster_label"]
+        .value_counts()
+        .reset_index()
+        .rename(columns={"index": "cluster_label", "cluster_label": "count"})
+    )
+    # value_counts() in newer pandas returns columns differently — normalise
+    if "count" not in cluster_counts.columns:
+        cluster_counts.columns = ["cluster_label", "count"]
+
+    _CLUSTER_COLOURS = {
+        "Low Performer": "#ef553b",
+        "Mid Tier":      "#636efa",
+        "Premium":       "#00cc96",
+    }
+    fig_clusters = px.bar(
+        cluster_counts,
+        x="cluster_label", y="count",
+        color="cluster_label",
+        color_discrete_map=_CLUSTER_COLOURS,
+        title="Products per Cluster",
+        labels={"cluster_label": "Cluster", "count": "Product Count"},
+    )
+    fig_clusters.update_layout(showlegend=False)
+
+    # Scatter — listing_price vs log_revenue, coloured by cluster
+    # Join listing_price from features_products for the scatter
+    try:
+        fp_df = pd.read_sql(
+            "SELECT product_id, listing_price, revenue AS log_revenue FROM features_products",
+            conn,
+        )
+        scatter_df = cluster_df.merge(fp_df, on=["product_id", "log_revenue"], how="inner")
+    except Exception:
+        scatter_df = pd.DataFrame()
+
+    col1, col2 = st.columns(2)
+    with col1:
+        st.plotly_chart(fig_clusters, use_container_width=True)
+    with col2:
+        if not scatter_df.empty:
+            fig_scatter = px.scatter(
+                scatter_df,
+                x="listing_price", y="log_revenue",
+                color="cluster_label",
+                color_discrete_map=_CLUSTER_COLOURS,
+                title="Price vs Log Revenue by Cluster",
+                labels={
+                    "listing_price": "Listing Price (£)",
+                    "log_revenue":   "Log Revenue",
+                    "cluster_label": "Cluster",
+                },
+                opacity=0.7,
+            )
+            st.plotly_chart(fig_scatter, use_container_width=True)
+
+except Exception:
+    st.info("⚠️ Cluster data not available. Run the pipeline to generate product clusters.")
+
+st.divider()
+
 # ── Recommendation engine ──────────────────────────────────────────────────────
 st.header("🎯 Product Recommendations")
 st.markdown(
@@ -171,6 +246,14 @@ def _load_artifact():
         ]
         with get_connection() as _conn:
             feat_df = pd.read_sql("SELECT * FROM features_products", _conn)
+            try:
+                clust_df = pd.read_sql(
+                    "SELECT product_id, cluster_label FROM analytics_product_clusters",
+                    _conn,
+                )
+                feat_df = feat_df.merge(clust_df, on="product_id", how="left")
+            except Exception:
+                feat_df["cluster_label"] = "Unknown"
 
         feat_df = feat_df.dropna(subset=FEATURE_COLS).reset_index(drop=True)
         X = StandardScaler().fit_transform(feat_df[FEATURE_COLS])
@@ -186,17 +269,29 @@ def _get_recommendations(
     df: pd.DataFrame,
     sim_matrix: np.ndarray,
     top_n: int,
+    cluster_only: bool = False,
 ) -> pd.DataFrame:
     matches = df.index[df["product_id"] == product_id].tolist()
     if not matches:
         return pd.DataFrame()
-    idx    = matches[0]
+    idx = matches[0]
+
     scores = sorted(enumerate(sim_matrix[idx]), key=lambda x: x[1], reverse=True)
 
-    # Fetch extra candidates before deduplication: the same product_name can
-    # appear under multiple product_ids (different colourways), so we need a
-    # larger pool to guarantee top_n unique names after deduplication.
-    candidates = [(i, s) for i, s in scores if i != idx][:top_n * 3]
+    if cluster_only and "cluster_label" in df.columns:
+        product_cluster = df.iloc[idx].get("cluster_label", None)
+        cluster_idx_set = set(
+            df.index[df["cluster_label"] == product_cluster].tolist()
+        )
+        # Fetch extra candidates before deduplication — same reasoning as below
+        candidates = [
+            (i, s) for i, s in scores if i != idx and i in cluster_idx_set
+        ][:top_n * 3]
+    else:
+        # Fetch extra candidates before deduplication: the same product_name can
+        # appear under multiple product_ids (different colourways), so we need a
+        # larger pool to guarantee top_n unique names after deduplication.
+        candidates = [(i, s) for i, s in scores if i != idx][:top_n * 3]
 
     rows = []
     for i, score in candidates:
@@ -204,6 +299,7 @@ def _get_recommendations(
         rows.append({
             "Product":     r["product_name"],
             "Brand":       r["brand"],
+            "Cluster":     r.get("cluster_label", "—"),
             "Price (£)":   f"{r['listing_price']:.0f}",
             "Rating":      f"{r['rating']:.2f}",
             "Revenue (£)": f"{(np.expm1(r['revenue'])):,.0f}",
@@ -232,15 +328,23 @@ else:
 
     product_names = sorted(feat_df["product_name"].dropna().unique().tolist())
 
-    col1, col2 = st.columns([4, 1])
+    col1, col2, col3 = st.columns([4, 1, 2])
     with col1:
         selected_name = st.selectbox("Select a product:", product_names)
     with col2:
         top_n = st.slider("Results", min_value=3, max_value=10, value=5)
+    with col3:
+        cluster_only = st.checkbox("Recommend within same cluster only")
+
+    # Show cluster label of the selected product
+    selected_rows = feat_df[feat_df["product_name"] == selected_name]
+    if not selected_rows.empty and "cluster_label" in feat_df.columns:
+        tier = selected_rows.iloc[0].get("cluster_label", "Unknown")
+        st.markdown(f"This product is in the **{tier}** tier.")
 
     if st.button("Get Recommendations", type="primary"):
         pid  = feat_df.loc[feat_df["product_name"] == selected_name, "product_id"].iloc[0]
-        recs = _get_recommendations(pid, feat_df, sim_matrix, top_n)
+        recs = _get_recommendations(pid, feat_df, sim_matrix, top_n, cluster_only=cluster_only)
         if recs.empty:
             st.warning("No recommendations found for this product.")
         else:

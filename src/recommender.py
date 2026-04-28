@@ -82,3 +82,62 @@ def get_recommendations(
 
     logger.info(f"Recommendations for '{product_id}': {len(results)} results")
     return pd.DataFrame(results)
+
+
+def get_recommendations_in_cluster(
+    product_id: str,
+    df: pd.DataFrame,
+    similarity_matrix: np.ndarray,
+    top_n: int = 5,
+) -> pd.DataFrame:
+    """
+    Returns top-N most similar products that share the same cluster_label
+    as the query product. df must contain a 'cluster_label' column (added
+    by merging analytics_product_clusters into features_products).
+
+    Falls back to get_recommendations() if cluster_label is absent.
+    """
+    if "cluster_label" not in df.columns:
+        logger.warning("cluster_label missing from df — falling back to get_recommendations()")
+        return get_recommendations(product_id, df, similarity_matrix, top_n)
+
+    matches = df.index[df["product_id"] == product_id].tolist()
+    if not matches:
+        logger.warning(f"product_id '{product_id}' not found in feature table")
+        return pd.DataFrame()
+
+    idx = matches[0]
+    product_cluster = df.iloc[idx]["cluster_label"]
+
+    cluster_indices = set(
+        df.index[
+            (df["cluster_label"] == product_cluster) & (df.index != idx)
+        ].tolist()
+    )
+
+    if not cluster_indices:
+        logger.warning(
+            f"No other products in cluster '{product_cluster}' for '{product_id}'"
+        )
+        return pd.DataFrame()
+
+    scores = sorted(enumerate(similarity_matrix[idx]), key=lambda x: x[1], reverse=True)
+    top = [(i, s) for i, s in scores if i in cluster_indices][:top_n]
+
+    results = []
+    for i, score in top:
+        row = df.iloc[i]
+        results.append({
+            "product_name":     row["product_name"],
+            "brand":            row["brand"],
+            "listing_price":    round(float(row["listing_price"]), 2),
+            "rating":           round(float(row["rating"]), 2),
+            "revenue":          round(float(row["revenue"]), 2),
+            "similarity_score": round(float(score), 4),
+        })
+
+    logger.info(
+        f"Cluster recommendations for '{product_id}' "
+        f"(cluster: {product_cluster}): {len(results)} results"
+    )
+    return pd.DataFrame(results)
