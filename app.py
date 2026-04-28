@@ -221,8 +221,8 @@ try:
             )
             st.plotly_chart(fig_scatter, use_container_width=True)
 
-except Exception:
-    st.info("⚠️ Cluster data not available. Run the pipeline to generate product clusters.")
+except Exception as _cluster_err:
+    st.info(f"⚠️ Cluster data not available: {_cluster_err}")
 
 st.divider()
 
