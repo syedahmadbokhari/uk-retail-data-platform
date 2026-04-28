@@ -165,15 +165,8 @@ try:
     )
 
     # Bar chart — product count per cluster
-    cluster_counts = (
-        cluster_df["cluster_label"]
-        .value_counts()
-        .reset_index()
-        .rename(columns={"index": "cluster_label", "cluster_label": "count"})
-    )
-    # value_counts() in newer pandas returns columns differently — normalise
-    if "count" not in cluster_counts.columns:
-        cluster_counts.columns = ["cluster_label", "count"]
+    _vc = cluster_df["cluster_label"].value_counts()
+    cluster_counts = pd.DataFrame({"cluster_label": _vc.index, "count": _vc.values})
 
     _CLUSTER_COLOURS = {
         "Low Performer": "#ef553b",
