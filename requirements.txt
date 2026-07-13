@@ -7,6 +7,8 @@ numpy
 SQLAlchemy>=2.0
 psycopg2-binary
 
+optuna>=3.6
+
 # ── Orchestration (install separately or via Docker image) ────────────────────
 # apache-airflow[postgres]>=2.8   # heavy install — use docker compose up instead
 

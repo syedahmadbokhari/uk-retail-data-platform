@@ -184,3 +184,7 @@ def ingest_incremental() -> int:
         f"{len(product_agg)} products updated in {elapsed:.2f}s"
     )
     return n_new
+
+
+if __name__ == "__main__":
+    ingest_incremental()
