@@ -4,6 +4,8 @@ pandas
 plotly
 scikit-learn
 numpy
+scipy
+matplotlib
 SQLAlchemy>=2.0
 psycopg2-binary
 

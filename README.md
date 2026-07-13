@@ -59,13 +59,43 @@ The result is a full-stack data platform covering event ingestion, layered trans
 Adidas accounts for over 93% of products and the majority of revenue. **Action:** Diversify the brand mix or negotiate improved margin terms with Adidas given the platform's dependency on a single supplier.
 
 ### Discounts are driving volume but at a cost
-Discounted products generate more total revenue than full-price items, meaning discount-led volume is the primary commercial lever. **Action:** Analyse revenue per unit (not total revenue) by discount tier to identify whether promotions are driving genuine incremental sales or cannibalising full-price purchases.
+Discounted products generate more total revenue than full-price items, meaning discount-led volume is the primary commercial lever. **Action:** This is now backed by a Mann-Whitney U test (p = 2.01e-05, see Statistical Validation below) rather than raw totals alone — though the effect size is small (r = 0.091), so the next step is still to analyse revenue per unit (not total revenue) by discount tier to confirm promotions are driving genuine incremental sales rather than cannibalising full-price purchases.
 
 ### Traffic peaked and has since declined
 Monthly website visits peaked in 2019. **Action:** Cross-reference traffic decline with discount frequency — if promotional periods are the only traffic drivers, the business is training customers to wait for sales rather than buy at full price.
 
 ### Product data quality issues exist at scale
 11% of products had corrupted pricing data. **Action:** Implement upstream data validation at the point of entry rather than relying on the pipeline to detect and discard bad rows downstream.
+
+---
+
+## 📈 Statistical Validation
+
+The Executive Summary and Business Insights above state that discounted products generate more total revenue than full-price items — but that claim was based on raw totals alone, which conflates "more products sold at a discount" with "each discounted product genuinely earns more." `src/analysis/statistical_tests.py` tests this rigorously at the per-product level, using revenue pulled from the `clean_finance` layer (3,120 products — 1,928 discounted, 1,192 full-price).
+
+<div align="center">
+  <img src="assets/discount_revenue_histograms.png" width="90%" alt="Revenue distribution by discount category"/>
+</div>
+<div align="center">
+  <img src="assets/discount_revenue_qqplots.png" width="90%" alt="Q-Q plots by discount category"/>
+</div>
+
+*Both distributions are heavily right-skewed with a long tail of high-revenue outliers — visible in the histograms and in both Q-Q plots curving well above the reference line, especially the ~£64k outlier in the Full Price group.*
+
+**Normality check (Shapiro-Wilk):**
+
+| Group | W statistic | p-value | Skew | Normal? |
+|-------|-------------|---------|------|---------|
+| Discounted | 0.867 | 1.20e-37 | 1.69 | No |
+| Full Price | 0.746 | 2.72e-39 | 2.49 | No |
+
+Both groups fail the normality check by a wide margin, so the module falls back to the **Mann-Whitney U test** (non-parametric) instead of a t-test.
+
+**Result:** U = 1,253,301.0, p = 2.01e-05, rank-biserial r = 0.091 (negligible-to-small effect).
+
+> Result: Mann-Whitney U test shows a statistically significant (negligible effect) difference in revenue between discounted and full-price products (p = 2.015e-05, U = 1253301.0). This confirms the discount-led revenue pattern observed in raw totals is not a distributional artifact — discounted products have a significantly higher typical per-product revenue than full-price products, so the discount-led revenue pattern is a real distributional effect and not just a byproduct of raw totals. Note: mean revenue is skewed by a small number of high-value outlier products (mean favors full-price products, median favors discounted products) — exactly why a rank-based test rather than a raw mean comparison is used here.
+
+**What this actually means:** the median discounted product earns £2,947.50 vs. £2,101.50 for full-price — consistent with the significant result and the original claim. But the *mean* tells the opposite story (£3,584 discounted vs. £4,545 full-price), because a handful of very high-revenue full-price products pull the average up. This is exactly the scenario hypothesis testing exists to catch: the raw-totals claim is directionally supported by the significance test, but the effect size is small, and a naive mean comparison alone would have told a misleading story driven by outliers rather than the typical product.
 
 ---
 
@@ -327,6 +357,7 @@ The re-run row confirms idempotency — running the pipeline twice produces the 
 | **Orchestration** | Apache Airflow 2.8 | DAG scheduling, retries, quality gates |
 | **Containerisation** | Docker Compose | Full-stack local deployment |
 | **Machine Learning** | scikit-learn | StandardScaler, cosine similarity |
+| **Statistics** | scipy.stats | Hypothesis testing (normality, t-test/Mann-Whitney U), effect size |
 | **Dashboard** | Streamlit | Live interactive analytics |
 | **Testing** | pytest, unittest.mock | 51 unit tests, mocked DB layer |
 | **CI/CD** | GitHub Actions | Automated test runs on every push |
