@@ -17,7 +17,7 @@
 
 ## Tableau Dashboard
 
-**[View the live dashboard on Tableau Public](YOUR_TABLEAU_PUBLIC_LINK_HERE)**
+**[View the live dashboard on Tableau Public](https://public.tableau.com/app/profile/ahmad.bokhari/viz/Book1_17839796949070/RetailPerformanceDashboard)**
 
 ![Tableau Dashboard](assets/tableau_dashboard.png)
 *Revenue by brand, top 10 products, monthly traffic trend, and discount impact — rebuilt in Tableau alongside the existing Power BI dashboard, using the same underlying analytics tables*
