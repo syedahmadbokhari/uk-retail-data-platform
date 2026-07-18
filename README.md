@@ -15,6 +15,17 @@
 
 ---
 
+## Tableau Dashboard
+
+**[View the live dashboard on Tableau Public](YOUR_TABLEAU_PUBLIC_LINK_HERE)**
+
+![Tableau Dashboard](assets/tableau_dashboard.png)
+*Revenue by brand, top 10 products, monthly traffic trend, and discount impact — rebuilt in Tableau alongside the existing Power BI dashboard, using the same underlying analytics tables*
+
+The same core analysis (revenue by brand, product performance, discount impact, traffic trends) was independently rebuilt in Tableau to compare both BI platforms on identical data. Notably, Tableau's built-in filter actions and continuous date handling required a slightly different approach than Power BI's DAX-driven measures — a useful exercise in understanding how the same analytical logic translates across tools.
+
+---
+
 ## Live Streamlit App
 
 **[View the live Streamlit app](https://sql-data-analysis-bisxvwilgc3ntxhken76wy.streamlit.app/)**
