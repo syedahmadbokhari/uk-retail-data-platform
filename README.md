@@ -353,7 +353,7 @@ The re-run row confirms idempotency — running the pipeline twice produces the 
 - Idempotent UPSERT pattern using `INSERT ... ON CONFLICT DO UPDATE`
 - Apache Airflow DAG with parallel tasks, quality gates, retries, and graceful dbt degradation
 - Docker Compose stack: Airflow 2.8 + PostgreSQL 15 + custom image with dbt-postgres
-- 51-test pytest suite with mocked DB connections for isolated unit testing
+- 93-test pytest suite with mocked DB connections for isolated unit testing
 - GitHub Actions CI running the full test suite on every push
 
 ### Data Analyst
@@ -386,7 +386,7 @@ The re-run row confirms idempotency — running the pipeline twice produces the 
 | **Machine Learning** | scikit-learn | StandardScaler, cosine similarity |
 | **Statistics** | scipy.stats | Hypothesis testing (normality, t-test/Mann-Whitney U), effect size |
 | **Dashboard** | Streamlit | Live interactive analytics |
-| **Testing** | pytest, unittest.mock | 51 unit tests, mocked DB layer |
+| **Testing** | pytest, unittest.mock | 93 unit tests, mocked DB layer |
 | **CI/CD** | GitHub Actions | Automated test runs on every push |
 | **Logging** | Python logging | Structured logs to console and file |
 
@@ -455,7 +455,7 @@ Total runtime on a 1,650-event dataset: **under 1 second**.
 ├── pipeline/
 │   ├── run_pipeline.py             # Local 7-step runner
 │   └── dags/retail_pipeline.py    # Airflow DAG — 10 tasks
-├── tests/                          # 51 unit tests
+├── tests/                          # 93 unit tests
 └── app.py                          # Streamlit dashboard
 ```
 
@@ -473,18 +473,21 @@ Total runtime on a 1,650-event dataset: **under 1 second**.
 
 ---
 
-## Testing — 51 Tests, All Passing
+## Testing — 93 Tests, All Passing
 
 ```bash
 pytest
-# 51 passed
+# 93 passed
 ```
 
 | File | Tests | Coverage |
 |------|-------|----------|
 | `test_clean.py` | 24 | European decimal conversion, discount clipping, null dropping, type validation |
+| `test_statistical_tests.py` | 19 | Normality check structure, test selection logic, effect size correctness on known synthetic data |
 | `test_features.py` | 14 | Median imputation, zero-price row removal, brand encoding, column structure |
+| `test_clustering.py` | 13 | Cluster label assignment, determinism, empty-input handling |
 | `test_recommender.py` | 13 | Self-exclusion, score ordering, score range, unknown product handling |
+| `test_export_excel_workbook.py` | 10 | Valid workbook output, sheet names/order, native charts, real (non-hardcoded) formulas |
 
 All tests mock the database layer — no database connection required to run the suite.
 
