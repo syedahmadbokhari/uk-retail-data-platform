@@ -99,3 +99,43 @@ def ensure_unique_index(table_name: str, col: str, conn) -> None:
         f"CREATE UNIQUE INDEX IF NOT EXISTS "
         f"uq_{table_name}_{col} ON {table_name}({col})"
     ))
+
+
+# ── BigQuery — cloud data warehouse mode ───────────────────────────────────────
+#
+# A third, independent backend selected by GOOGLE_CLOUD_PROJECT, following the
+# same environment-variable-driven pattern as the Postgres/SQLite switch in
+# _build_url() above. Nothing above this point is touched: get_engine() and
+# get_connection() remain SQLAlchemy-only and keep working exactly as before.
+#
+# BigQuery is not accessed through SQLAlchemy here — DDL features this repo's
+# BigQuery scripts rely on (native DATE partitioning, CLUSTER BY, dry-run cost
+# estimation) are expressed directly through the google-cloud-bigquery client,
+# so callers that need BigQuery use get_bigquery_client() rather than
+# get_connection().
+
+def is_bigquery_enabled() -> bool:
+    """True when GOOGLE_CLOUD_PROJECT is set, selecting the BigQuery backend."""
+    return bool(os.getenv("GOOGLE_CLOUD_PROJECT"))
+
+
+def get_bigquery_dataset() -> str:
+    return os.getenv("BIGQUERY_DATASET", "retail_analytics")
+
+
+def get_bigquery_client():
+    """
+    Returns a google.cloud.bigquery.Client for the project named in
+    GOOGLE_CLOUD_PROJECT. Import is deliberately local to this function so
+    that importing src.utils.db never requires google-cloud-bigquery to be
+    installed unless the BigQuery backend is actually used.
+    """
+    from google.cloud import bigquery
+
+    project = os.getenv("GOOGLE_CLOUD_PROJECT")
+    if not project:
+        raise RuntimeError(
+            "get_bigquery_client() called without GOOGLE_CLOUD_PROJECT set — "
+            "check is_bigquery_enabled() before calling this."
+        )
+    return bigquery.Client(project=project)

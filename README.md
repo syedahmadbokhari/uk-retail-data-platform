@@ -126,6 +126,25 @@ Both groups fail the normality check by a wide margin, so the module falls back 
 
 ---
 
+## ☁️ Data Warehousing (BigQuery)
+
+This platform's PostgreSQL/SQLite abstraction (`src/utils/db.py`) extends to a third, cloud data-warehouse backend: when `GOOGLE_CLOUD_PROJECT` is set, BigQuery-specific scripts connect via `google-cloud-bigquery` instead. Existing PostgreSQL/SQLite code paths are untouched — this is a **local (SQLite) → CI (SQLite) → cloud warehouse (BigQuery)** three-mode story, not a replacement.
+
+| Script | Purpose |
+|--------|---------|
+| `src/etl/bigquery_setup.py` | Defines the BigQuery dataset/table schemas — the partitioned+clustered fact table and the five analytics marts |
+| `src/etl/migrate_to_bigquery.py` | Idempotently loads the active backend's clean/analytics data into BigQuery (`WRITE_TRUNCATE` — safe to re-run, mirrors the `if_exists="replace"` pattern already used in `aggregate.py`) |
+| `src/analysis/bigquery_cost_comparison.py` | Dry-run bytes-scanned comparison between the optimised table and a deliberately unoptimised copy |
+
+**What was partitioned/clustered, and why:**
+- `fact_sales_events` is **partitioned BY DATE(event_timestamp)** — every representative query filters on a date range ("revenue in the last N days"), and native date partitioning lets BigQuery skip entire days outside that range instead of scanning the whole table.
+- The same table is **clustered on `product_id`** rather than `brand`. Clustering only helps on high-cardinality filter columns — `brand` has just 2 distinct values in this dataset, far too low for block pruning to matter, while `product_id` (~3,120 distinct values) is the fact table's own natural key and exactly what per-product lookups filter on.
+- The five `analytics_*` mart tables are **not** partitioned or clustered — they're small aggregates (one row per brand/product/month/category), so there's no scan to prune.
+
+**Cost comparison — honest status:** `bigquery_cost_comparison.py` is fully implemented and unit-tested (mocked), and uses BigQuery's dry-run feature to capture real bytes-scanned figures with zero query cost. It has **not** been run against a live BigQuery project — this environment has no GCP project or credentials configured, and per this project's own rule against fabricated numbers, no bytes-scanned or cost figures are reported here. Running `python -m src.analysis.bigquery_cost_comparison` against a real (even free-tier) GCP project will print the actual partitioned-vs-flat comparison; this section will be updated with those real numbers once that's done.
+
+---
+
 ## ❓ Key Business Questions Answered
 
 - Which products are generating the most revenue, and how concentrated is that revenue?
@@ -353,7 +372,7 @@ The re-run row confirms idempotency — running the pipeline twice produces the 
 - Idempotent UPSERT pattern using `INSERT ... ON CONFLICT DO UPDATE`
 - Apache Airflow DAG with parallel tasks, quality gates, retries, and graceful dbt degradation
 - Docker Compose stack: Airflow 2.8 + PostgreSQL 15 + custom image with dbt-postgres
-- 93-test pytest suite with mocked DB connections for isolated unit testing
+- 111-test pytest suite with mocked DB connections for isolated unit testing
 - GitHub Actions CI running the full test suite on every push
 
 ### Data Analyst
@@ -385,8 +404,9 @@ The re-run row confirms idempotency — running the pipeline twice produces the 
 | **Containerisation** | Docker Compose | Full-stack local deployment |
 | **Machine Learning** | scikit-learn | StandardScaler, cosine similarity |
 | **Statistics** | scipy.stats | Hypothesis testing (normality, t-test/Mann-Whitney U), effect size |
+| **Data Warehousing** | Google BigQuery | Partitioned + clustered cloud fact table, dry-run cost estimation |
 | **Dashboard** | Streamlit | Live interactive analytics |
-| **Testing** | pytest, unittest.mock | 93 unit tests, mocked DB layer |
+| **Testing** | pytest, unittest.mock | 111 unit tests, mocked DB layer |
 | **CI/CD** | GitHub Actions | Automated test runs on every push |
 | **Logging** | Python logging | Structured logs to console and file |
 
@@ -455,7 +475,7 @@ Total runtime on a 1,650-event dataset: **under 1 second**.
 ├── pipeline/
 │   ├── run_pipeline.py             # Local 7-step runner
 │   └── dags/retail_pipeline.py    # Airflow DAG — 10 tasks
-├── tests/                          # 93 unit tests
+├── tests/                          # 111 unit tests
 └── app.py                          # Streamlit dashboard
 ```
 
@@ -473,23 +493,24 @@ Total runtime on a 1,650-event dataset: **under 1 second**.
 
 ---
 
-## Testing — 93 Tests, All Passing
+## Testing — 111 Tests, All Passing
 
 ```bash
 pytest
-# 93 passed
+# 111 passed
 ```
 
 | File | Tests | Coverage |
 |------|-------|----------|
 | `test_clean.py` | 24 | European decimal conversion, discount clipping, null dropping, type validation |
+| `test_bigquery_setup.py` | 18 | Partitioning/clustering config, idempotent load (WRITE_TRUNCATE), graceful skip without credentials |
 | `test_statistical_tests.py` | 19 | Normality check structure, test selection logic, effect size correctness on known synthetic data |
 | `test_features.py` | 14 | Median imputation, zero-price row removal, brand encoding, column structure |
 | `test_clustering.py` | 13 | Cluster label assignment, determinism, empty-input handling |
 | `test_recommender.py` | 13 | Self-exclusion, score ordering, score range, unknown product handling |
 | `test_export_excel_workbook.py` | 10 | Valid workbook output, sheet names/order, native charts, real (non-hardcoded) formulas |
 
-All tests mock the database layer — no database connection required to run the suite.
+All tests mock the database layer (and the BigQuery client) — no database or cloud connection required to run the suite.
 
 ---
 
