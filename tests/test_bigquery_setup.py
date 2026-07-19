@@ -13,6 +13,7 @@ google-cloud-bigquery objects, not mocks — only the network-calling Client
 methods (create_table, create_dataset, query, load_table_from_dataframe)
 are mocked.
 """
+import datetime
 import pandas as pd
 import pytest
 from unittest.mock import patch, MagicMock, ANY
@@ -27,7 +28,9 @@ from src.etl.bigquery_setup import (
     MART_SCHEMAS,
 )
 from src.etl.migrate_to_bigquery import migrate_fact_table, migrate_mart_tables, _load_dataframe
-from src.analysis.bigquery_cost_comparison import compare, estimated_cost_usd, BYTES_PER_TIB
+from src.analysis.bigquery_cost_comparison import (
+    compare, estimated_cost_usd, BYTES_PER_TIB, _representative_date_window,
+)
 from src.utils.db import get_bigquery_client, is_bigquery_enabled
 
 _DATASET_ID = "test-project.retail_analytics"
@@ -182,3 +185,45 @@ def test_estimated_cost_usd_matches_published_rate_at_one_tib():
 
 def test_estimated_cost_usd_is_zero_for_zero_bytes():
     assert estimated_cost_usd(0) == 0.0
+
+
+# ── Representative date window — anchored to real data, not datetime.today() ─
+#
+# Regression coverage for a real bug: the window used to be computed from
+# datetime.date.today(), which silently stopped overlapping this static
+# dataset's actual dates once enough real time had passed, producing a
+# 0-bytes-scanned result that looked like a clean partitioning win but was
+# actually just a date filter matching zero partitions.
+
+def test_representative_date_window_ends_at_the_tables_actual_max_date():
+    mock_client = MagicMock()
+    mock_client.query.return_value.result.return_value = [
+        MagicMock(max_date=datetime.date(2026, 4, 30))
+    ]
+    start, end = _representative_date_window(mock_client, "proj.ds.fact_sales_events")
+    assert end == "2026-04-30"
+
+
+def test_representative_date_window_spans_requested_number_of_days():
+    mock_client = MagicMock()
+    mock_client.query.return_value.result.return_value = [
+        MagicMock(max_date=datetime.date(2026, 4, 30))
+    ]
+    start, end = _representative_date_window(mock_client, "proj.ds.fact_sales_events", window_days=3)
+    assert start == "2026-04-28"   # 28, 29, 30 -> 3 days inclusive
+    assert end == "2026-04-30"
+
+
+def test_representative_date_window_never_uses_todays_date(monkeypatch):
+    """The window must come from the table's own data, not wall-clock time."""
+    monkeypatch.setattr(
+        "src.analysis.bigquery_cost_comparison.datetime",
+        MagicMock(date=MagicMock(today=MagicMock(side_effect=AssertionError("must not call datetime.date.today()"))),
+                  timedelta=datetime.timedelta),
+    )
+    mock_client = MagicMock()
+    mock_client.query.return_value.result.return_value = [
+        MagicMock(max_date=datetime.date(2020, 1, 10))
+    ]
+    start, end = _representative_date_window(mock_client, "proj.ds.fact_sales_events")
+    assert end == "2020-01-10"

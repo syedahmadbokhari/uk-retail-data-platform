@@ -141,7 +141,20 @@ This platform's PostgreSQL/SQLite abstraction (`src/utils/db.py`) extends to a t
 - The same table is **clustered on `product_id`** rather than `brand`. Clustering only helps on high-cardinality filter columns — `brand` has just 2 distinct values in this dataset, far too low for block pruning to matter, while `product_id` (~3,120 distinct values) is the fact table's own natural key and exactly what per-product lookups filter on.
 - The five `analytics_*` mart tables are **not** partitioned or clustered — they're small aggregates (one row per brand/product/month/category), so there's no scan to prune.
 
-**Cost comparison — honest status:** `bigquery_cost_comparison.py` is fully implemented and unit-tested (mocked), and uses BigQuery's dry-run feature to capture real bytes-scanned figures with zero query cost. It has **not** been run against a live BigQuery project — this environment has no GCP project or credentials configured, and per this project's own rule against fabricated numbers, no bytes-scanned or cost figures are reported here. Running `python -m src.analysis.bigquery_cost_comparison` against a real (even free-tier) GCP project will print the actual partitioned-vs-flat comparison; this section will be updated with those real numbers once that's done.
+**Cost comparison — real, verified result:**
+
+```
+Representative date window (from real data): 2026-04-28 to 2026-04-30
+Partitioned + clustered : 32,164 bytes scanned
+Flat (no optimisation)  : 77,856 bytes scanned
+Reduction               : 58.7%
+```
+
+Run with `python -m src.analysis.bigquery_cost_comparison` against a live GCP project, using BigQuery's dry-run feature — these are real bytes-scanned figures from BigQuery's own query planner, not estimates, and no query cost was incurred to obtain them.
+
+**How this number was validated, not just accepted:** the first run of this script reported a 100% reduction (0 bytes vs. 77,856 bytes), which turned out to be a bug, not a win — the demo query's date filter was computed as `datetime.date.today() - 30 days`, but `fact_sales_events` is a static, one-time-generated dataset (a real ~6-day burst of events, not a continuously arriving feed). Enough real time had passed since generation that the filter no longer overlapped the table's actual dates at all, so BigQuery's partition pruning correctly reported 0 bytes for a query matching zero partitions — a legitimate dry-run answer, but a misleading one to cite as a partitioning win. The fix anchors the date window to the table's own actual `MAX(event_timestamp)` at run time instead of wall-clock time (3 regression tests lock this in), and the 58.7% figure above is the result after that fix, confirmed against live data.
+
+**Caveat on clustering:** at this dataset's scale (~3,150 rows total, ~1,050 rows in the 3-day query window), clustering's contribution is hard to isolate from partitioning's — a table this small likely fits within one or a handful of storage blocks per partition regardless of cluster ordering, so block-level pruning has little left to do. Partitioning is the lever genuinely demonstrated by the 58.7% figure above; clustering on `product_id` is expected to matter far more once this table holds production-scale volumes (many GB per partition), where it isn't practical to demonstrate on a portfolio-sized synthetic dataset.
 
 ---
 
@@ -372,7 +385,7 @@ The re-run row confirms idempotency — running the pipeline twice produces the 
 - Idempotent UPSERT pattern using `INSERT ... ON CONFLICT DO UPDATE`
 - Apache Airflow DAG with parallel tasks, quality gates, retries, and graceful dbt degradation
 - Docker Compose stack: Airflow 2.8 + PostgreSQL 15 + custom image with dbt-postgres
-- 111-test pytest suite with mocked DB connections for isolated unit testing
+- 114-test pytest suite with mocked DB connections for isolated unit testing
 - GitHub Actions CI running the full test suite on every push
 
 ### Data Analyst
@@ -406,7 +419,7 @@ The re-run row confirms idempotency — running the pipeline twice produces the 
 | **Statistics** | scipy.stats | Hypothesis testing (normality, t-test/Mann-Whitney U), effect size |
 | **Data Warehousing** | Google BigQuery | Partitioned + clustered cloud fact table, dry-run cost estimation |
 | **Dashboard** | Streamlit | Live interactive analytics |
-| **Testing** | pytest, unittest.mock | 111 unit tests, mocked DB layer |
+| **Testing** | pytest, unittest.mock | 114 unit tests, mocked DB layer |
 | **CI/CD** | GitHub Actions | Automated test runs on every push |
 | **Logging** | Python logging | Structured logs to console and file |
 
@@ -475,7 +488,7 @@ Total runtime on a 1,650-event dataset: **under 1 second**.
 ├── pipeline/
 │   ├── run_pipeline.py             # Local 7-step runner
 │   └── dags/retail_pipeline.py    # Airflow DAG — 10 tasks
-├── tests/                          # 111 unit tests
+├── tests/                          # 114 unit tests
 └── app.py                          # Streamlit dashboard
 ```
 
@@ -493,17 +506,17 @@ Total runtime on a 1,650-event dataset: **under 1 second**.
 
 ---
 
-## Testing — 111 Tests, All Passing
+## Testing — 114 Tests, All Passing
 
 ```bash
 pytest
-# 111 passed
+# 114 passed
 ```
 
 | File | Tests | Coverage |
 |------|-------|----------|
 | `test_clean.py` | 24 | European decimal conversion, discount clipping, null dropping, type validation |
-| `test_bigquery_setup.py` | 18 | Partitioning/clustering config, idempotent load (WRITE_TRUNCATE), graceful skip without credentials |
+| `test_bigquery_setup.py` | 21 | Partitioning/clustering config, idempotent load (WRITE_TRUNCATE), graceful skip without credentials, date window anchored to real data not wall-clock time |
 | `test_statistical_tests.py` | 19 | Normality check structure, test selection logic, effect size correctness on known synthetic data |
 | `test_features.py` | 14 | Median imputation, zero-price row removal, brand encoding, column structure |
 | `test_clustering.py` | 13 | Cluster label assignment, determinism, empty-input handling |

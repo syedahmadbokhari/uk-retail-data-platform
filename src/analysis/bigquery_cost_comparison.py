@@ -14,6 +14,16 @@ a realistic "how much did product X make last month" lookup. It exercises
 both optimisations on the same query: the date filter benefits from
 partition pruning, and the product_id filter benefits from clustering.
 
+The date window is derived from the ACTUAL min/max event_timestamp in the
+table at run time (see _representative_date_window()), not from
+datetime.date.today(). fact_sales_events is a static, one-time-generated
+synthetic dataset (a real ~6-day burst, not a continuously arriving feed),
+so a "today minus 30 days" window would silently drift out of range as
+real time passes since the data was generated — which previously produced
+a 0-bytes-scanned result that looked like a clean partitioning win but was
+actually just a date filter matching zero partitions. Anchoring the window
+to the table's own data keeps this demonstration meaningful.
+
 Cost estimate: BigQuery on-demand pricing is $6.25 per TiB scanned (Google
 Cloud's published on-demand rate as of this writing — see
 https://cloud.google.com/bigquery/pricing; the first 1 TiB/month is free).
@@ -37,12 +47,10 @@ FLAT_TABLE = f"{FACT_TABLE}_flat"
 PRICE_PER_TIB_USD = 6.25
 BYTES_PER_TIB = 1024 ** 4
 
-# A representative filter — any real product_id / recent date range works
-# equally well for a dry run, since BigQuery estimates bytes scanned from
-# the partitions/blocks the filter touches, not from executing the query.
+# Any real product_id works for the clustering side of the demo query —
+# this one is confirmed present in the dataset (see module docstring history).
 _SAMPLE_PRODUCT_ID = "G27341"
-_SAMPLE_START_DATE = (datetime.date.today() - datetime.timedelta(days=30)).isoformat()
-_SAMPLE_END_DATE = datetime.date.today().isoformat()
+_WINDOW_DAYS = 3  # out of ~7 days total in this synthetic dataset — see _representative_date_window()
 
 _QUERY_TEMPLATE = """
     SELECT SUM(revenue) AS total_revenue
@@ -50,6 +58,23 @@ _QUERY_TEMPLATE = """
     WHERE DATE(event_timestamp) BETWEEN @start_date AND @end_date
       AND product_id = @product_id
 """
+
+
+def _representative_date_window(client, table_fqn: str, window_days: int = _WINDOW_DAYS) -> tuple:
+    """
+    Anchors the demo query's date filter to the LAST `window_days` days that
+    actually exist in the table, rather than "today minus N days". This is a
+    static, one-time-generated dataset (not a continuously arriving feed), so
+    a today-relative window silently drifts out of range as real time passes
+    — which previously produced a 0-bytes-scanned result that looked like a
+    clean partitioning win but was actually just a filter matching zero
+    partitions. Returns (start_date, end_date) as ISO date strings.
+    """
+    max_date = list(client.query(
+        f"SELECT MAX(DATE(event_timestamp)) AS max_date FROM `{table_fqn}`"
+    ).result())[0].max_date
+    start_date = max_date - datetime.timedelta(days=window_days - 1)
+    return start_date.isoformat(), max_date.isoformat()
 
 
 def create_flat_comparison_table(client, dataset_id: str) -> None:
@@ -66,13 +91,13 @@ def create_flat_comparison_table(client, dataset_id: str) -> None:
     logger.info(f"  {FLAT_TABLE}: refreshed as an unpartitioned/unclustered copy for comparison")
 
 
-def _dry_run_bytes(client, table_fqn: str) -> int:
+def _dry_run_bytes(client, table_fqn: str, start_date: str, end_date: str) -> int:
     job_config = bigquery.QueryJobConfig(
         dry_run=True,
         use_query_cache=False,
         query_parameters=[
-            bigquery.ScalarQueryParameter("start_date", "DATE", _SAMPLE_START_DATE),
-            bigquery.ScalarQueryParameter("end_date", "DATE", _SAMPLE_END_DATE),
+            bigquery.ScalarQueryParameter("start_date", "DATE", start_date),
+            bigquery.ScalarQueryParameter("end_date", "DATE", end_date),
             bigquery.ScalarQueryParameter("product_id", "STRING", _SAMPLE_PRODUCT_ID),
         ],
     )
@@ -103,8 +128,11 @@ def compare() -> dict:
         dataset_id = f"{client.project}.{get_bigquery_dataset()}"
         create_flat_comparison_table(client, dataset_id)
 
-        partitioned_bytes = _dry_run_bytes(client, f"{dataset_id}.{FACT_TABLE}")
-        flat_bytes = _dry_run_bytes(client, f"{dataset_id}.{FLAT_TABLE}")
+        start_date, end_date = _representative_date_window(client, f"{dataset_id}.{FACT_TABLE}")
+        logger.info(f"  Representative date window (from real data): {start_date} to {end_date}")
+
+        partitioned_bytes = _dry_run_bytes(client, f"{dataset_id}.{FACT_TABLE}", start_date, end_date)
+        flat_bytes = _dry_run_bytes(client, f"{dataset_id}.{FLAT_TABLE}", start_date, end_date)
     except Exception as exc:
         logger.info(
             f"BigQuery is not reachable in this environment ({type(exc).__name__}: {exc}) "
@@ -116,6 +144,8 @@ def compare() -> dict:
         (1 - partitioned_bytes / flat_bytes) * 100 if flat_bytes > 0 else 0.0
     )
     result = {
+        "date_window": (start_date, end_date),
+        "product_id": _SAMPLE_PRODUCT_ID,
         "partitioned_bytes_scanned": partitioned_bytes,
         "flat_bytes_scanned": flat_bytes,
         "reduction_pct": reduction_pct,
