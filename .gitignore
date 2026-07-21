@@ -34,6 +34,9 @@ logs/*.log
 # Generated model artifacts (re-run pipeline/run_pipeline.py to regenerate)
 models/*.pkl
 
+# MLflow local tracking store (re-run src/tune_clusters.py to regenerate)
+mlruns/
+
 # SQLite temporary files
 *.sqlite-journal
 

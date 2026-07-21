@@ -158,6 +158,34 @@ Run with `python -m src.analysis.bigquery_cost_comparison` against a live GCP pr
 
 ---
 
+## 🧪 Model Tracking (MLflow)
+
+`src/tune_clusters.py`'s Optuna hyperparameter search for the K-means product clustering (see [Engineering Challenges](#engineering-challenges-solved) and `src/clustering.py`) previously only ever printed its results to the console — no history, no saved model, nothing to compare between runs. Every trial is now logged as its own MLflow run: the tuned parameter (`n_clusters`), the optimisation metric (`silhouette_score`), and the fitted `KMeans` model itself as a versioned artifact.
+
+**What's tracked, and why:**
+- **Parameter:** `n_clusters` (Optuna's search space: 2–8)
+- **Metric:** silhouette score (the same metric Optuna optimises for)
+- **Artifact:** the fitted `KMeans` model for every trial, not just the winner — so any trial can be inspected or reloaded later, not only reasoned about from a printed number
+
+**Real result from a live run (20 trials):** the best trial found `n_clusters=3` (silhouette = 0.3417) — which happens to match `clustering.py`'s existing hardcoded `N_CLUSTERS = 3`, a genuine (if modest) confirmation that the original choice was already optimal for this dataset, not just convenient.
+
+**Best-model registration:** after the study finishes, the run with the highest silhouette score is registered as a new version of `kmeans_cluster_model` in MLflow's Model Registry and tagged `stage=production` — a single, unambiguous record of which version is meant to be used, rather than a printed line in a terminal no one saved.
+
+**Comparing runs — genuinely runnable, not just described:**
+```bash
+python -m src.tune_clusters           # runs the study, logs every trial, registers the best
+python -m src.compare_mlflow_runs      # prints every logged trial, sorted best-first
+mlflow ui --backend-store-uri sqlite:///mlruns/mlflow.db   # full interactive UI
+```
+
+**The cosine similarity recommender was NOT integrated — honestly, not by oversight.** `src/recommender.py`'s `build_similarity_matrix()` is a fully deterministic calculation (`StandardScaler` + `cosine_similarity` over a fixed feature list) with no hyperparameters, no randomness, and nothing to search or compare between runs. Forcing MLflow tracking onto it would mean logging the same fixed inputs and outputs every time — tracking for its own sake, not because there's anything genuinely versionable. If the feature set or a similarity threshold ever became tunable, this would be revisited.
+
+**A known gap, not hidden:** `clustering.py`'s `build_clusters()` still uses its own hardcoded `N_CLUSTERS = 3` rather than automatically loading the registered `kmeans_cluster_model` from the Model Registry — the tuning study and the production clustering pipeline are not yet wired together. That they currently agree (3 clusters) is a useful confirmation, not a substitute for closing that gap.
+
+**Tracking store:** a local SQLite file (`mlruns/mlflow.db`), not a remote server — consistent with this project's local/CI-friendly philosophy. MLflow's plain filesystem store (`file:./mlruns`) is in maintenance mode as of MLflow 3.x and no longer supports the Model Registry, so SQLite is the local-only option that still does.
+
+---
+
 ## ❓ Key Business Questions Answered
 
 - Which products are generating the most revenue, and how concentrated is that revenue?
@@ -385,7 +413,7 @@ The re-run row confirms idempotency — running the pipeline twice produces the 
 - Idempotent UPSERT pattern using `INSERT ... ON CONFLICT DO UPDATE`
 - Apache Airflow DAG with parallel tasks, quality gates, retries, and graceful dbt degradation
 - Docker Compose stack: Airflow 2.8 + PostgreSQL 15 + custom image with dbt-postgres
-- 114-test pytest suite with mocked DB connections for isolated unit testing
+- 120-test pytest suite with mocked DB connections for isolated unit testing
 - GitHub Actions CI running the full test suite on every push
 
 ### Data Analyst
@@ -418,8 +446,9 @@ The re-run row confirms idempotency — running the pipeline twice produces the 
 | **Machine Learning** | scikit-learn | StandardScaler, cosine similarity |
 | **Statistics** | scipy.stats | Hypothesis testing (normality, t-test/Mann-Whitney U), effect size |
 | **Data Warehousing** | Google BigQuery | Partitioned + clustered cloud fact table, dry-run cost estimation |
+| **Model Tracking** | MLflow | Optuna trial logging, model artifacts, Model Registry |
 | **Dashboard** | Streamlit | Live interactive analytics |
-| **Testing** | pytest, unittest.mock | 114 unit tests, mocked DB layer |
+| **Testing** | pytest, unittest.mock | 120 unit tests, mocked DB layer |
 | **CI/CD** | GitHub Actions | Automated test runs on every push |
 | **Logging** | Python logging | Structured logs to console and file |
 
@@ -488,7 +517,7 @@ Total runtime on a 1,650-event dataset: **under 1 second**.
 ├── pipeline/
 │   ├── run_pipeline.py             # Local 7-step runner
 │   └── dags/retail_pipeline.py    # Airflow DAG — 10 tasks
-├── tests/                          # 114 unit tests
+├── tests/                          # 120 unit tests
 └── app.py                          # Streamlit dashboard
 ```
 
@@ -506,11 +535,11 @@ Total runtime on a 1,650-event dataset: **under 1 second**.
 
 ---
 
-## Testing — 114 Tests, All Passing
+## Testing — 120 Tests, All Passing
 
 ```bash
 pytest
-# 114 passed
+# 120 passed
 ```
 
 | File | Tests | Coverage |
@@ -522,6 +551,7 @@ pytest
 | `test_clustering.py` | 13 | Cluster label assignment, determinism, empty-input handling |
 | `test_recommender.py` | 13 | Self-exclusion, score ordering, score range, unknown product handling |
 | `test_export_excel_workbook.py` | 10 | Valid workbook output, sheet names/order, native charts, real (non-hardcoded) formulas |
+| `test_mlflow_tracking.py` | 6 | Per-trial param/metric/model logging, best-run selection, Model Registry registration + tagging, graceful empty-experiment handling |
 
 All tests mock the database layer (and the BigQuery client) — no database or cloud connection required to run the suite.
 
