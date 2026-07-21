@@ -5,6 +5,7 @@ plotly
 scikit-learn
 numpy
 scipy
+statsmodels
 matplotlib
 openpyxl
 SQLAlchemy>=2.0

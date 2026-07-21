@@ -110,6 +110,27 @@ Both groups fail the normality check by a wide margin, so the module falls back 
 
 ---
 
+## 🧪 A/B Testing Methodology (Simulated)
+
+**This section demonstrates A/B test methodology using a SIMULATED experiment — it is not a claim that a live A/B test was run on real customers, website traffic, or transactions.** `src/analysis/ab_test_simulation.py` takes the same real per-product revenue values used above, discards the real historical discount status entirely, and randomly re-assigns every product to a "Treatment" or "Control" group with a fixed-seed 50/50 coin flip. Everything downstream — the test statistic, the p-value, the confidence interval — is real and genuinely computed on that simulated split; only the group assignment itself is synthetic.
+
+**How this differs from Statistical Validation above:** that section analyses *real, historical, non-randomized* data — the discount status reflects actual pricing decisions, so it can only show association, never a controlled experimental result. This section instead demonstrates the three pillars a real A/B test needs and observational analysis can't provide: **randomization**, an **a priori power analysis**, and a **significance test on the randomized groups**.
+
+**Sample size requirement (calculated, not assumed):** for a Cohen's d = 0.5 ("medium") minimum detectable effect at α = 0.05 and 80% power, `statsmodels`' `TTestIndPower` solver returns **64 per group** — this matches the standard Cohen (1988) textbook reference value for these inputs, cross-checked directly in the test suite.
+
+**Real result from an actual run:**
+
+```
+Simulated assignment (seed=42): 1,573 Treatment, 1,547 Control
+Required sample size per group: 64  |  Achieved: 1,547 per group (well-powered)
+t = -1.528, p = 0.1266, Cohen's d = -0.055
+Result: not statistically significant
+```
+
+No significant difference was found between the randomly-assigned groups — which is the **statistically correct expectation**, not a disappointing result: since assignment was pure chance with no real intervention behind it, there is no real effect for the test to find. Had this run come back significant instead, that would be a false positive (a Type I error, expected in roughly 5% of runs by construction under α = 0.05) rather than a genuine discovery — the module's summary function is written to say so explicitly rather than presenting a lucky random split as a finding, and this is verified in the test suite.
+
+---
+
 ## 📊 Excel Analysis Deliverable
 
 `src/analysis/export_excel_workbook.py` generates a native Excel workbook — **[exports/Retail_Data_Platform_Analysis.xlsx](exports/Retail_Data_Platform_Analysis.xlsx)** — as a standalone business-analyst-style deliverable, pulling real numbers from the same clean/analytics layer as the rest of the pipeline rather than pasting static exports:
@@ -413,7 +434,7 @@ The re-run row confirms idempotency — running the pipeline twice produces the 
 - Idempotent UPSERT pattern using `INSERT ... ON CONFLICT DO UPDATE`
 - Apache Airflow DAG with parallel tasks, quality gates, retries, and graceful dbt degradation
 - Docker Compose stack: Airflow 2.8 + PostgreSQL 15 + custom image with dbt-postgres
-- 120-test pytest suite with mocked DB connections for isolated unit testing
+- 138-test pytest suite with mocked DB connections for isolated unit testing
 - GitHub Actions CI running the full test suite on every push
 
 ### Data Analyst
@@ -445,10 +466,11 @@ The re-run row confirms idempotency — running the pipeline twice produces the 
 | **Containerisation** | Docker Compose | Full-stack local deployment |
 | **Machine Learning** | scikit-learn | StandardScaler, cosine similarity |
 | **Statistics** | scipy.stats | Hypothesis testing (normality, t-test/Mann-Whitney U), effect size |
+| **Experimental Design** | statsmodels | A/B test power analysis, sample size calculation |
 | **Data Warehousing** | Google BigQuery | Partitioned + clustered cloud fact table, dry-run cost estimation |
 | **Model Tracking** | MLflow | Optuna trial logging, model artifacts, Model Registry |
 | **Dashboard** | Streamlit | Live interactive analytics |
-| **Testing** | pytest, unittest.mock | 120 unit tests, mocked DB layer |
+| **Testing** | pytest, unittest.mock | 138 unit tests, mocked DB layer |
 | **CI/CD** | GitHub Actions | Automated test runs on every push |
 | **Logging** | Python logging | Structured logs to console and file |
 
@@ -517,7 +539,7 @@ Total runtime on a 1,650-event dataset: **under 1 second**.
 ├── pipeline/
 │   ├── run_pipeline.py             # Local 7-step runner
 │   └── dags/retail_pipeline.py    # Airflow DAG — 10 tasks
-├── tests/                          # 120 unit tests
+├── tests/                          # 138 unit tests
 └── app.py                          # Streamlit dashboard
 ```
 
@@ -535,11 +557,11 @@ Total runtime on a 1,650-event dataset: **under 1 second**.
 
 ---
 
-## Testing — 120 Tests, All Passing
+## Testing — 138 Tests, All Passing
 
 ```bash
 pytest
-# 120 passed
+# 138 passed
 ```
 
 | File | Tests | Coverage |
@@ -547,6 +569,7 @@ pytest
 | `test_clean.py` | 24 | European decimal conversion, discount clipping, null dropping, type validation |
 | `test_bigquery_setup.py` | 21 | Partitioning/clustering config, idempotent load (WRITE_TRUNCATE), graceful skip without credentials, date window anchored to real data not wall-clock time |
 | `test_statistical_tests.py` | 19 | Normality check structure, test selection logic, effect size correctness on known synthetic data |
+| `test_ab_test_simulation.py` | 18 | Randomization balance/reproducibility, power calculation vs. Cohen (1988) reference, effect detection on manufactured data, honest/simulated-labeled summaries |
 | `test_features.py` | 14 | Median imputation, zero-price row removal, brand encoding, column structure |
 | `test_clustering.py` | 13 | Cluster label assignment, determinism, empty-input handling |
 | `test_recommender.py` | 13 | Self-exclusion, score ordering, score range, unknown product handling |
