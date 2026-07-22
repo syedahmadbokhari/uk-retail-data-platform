@@ -179,6 +179,32 @@ Run with `python -m src.analysis.bigquery_cost_comparison` against a live GCP pr
 
 ---
 
+## 🆚 Cloud Data Warehouse Comparison (BigQuery vs Snowflake)
+
+Snowflake is added as a **second, independent** cloud warehouse option — `SNOWFLAKE_ACCOUNT` selects it in `src/utils/db.py`, the same env-var-driven pattern as BigQuery's `GOOGLE_CLOUD_PROJECT`. This does not replace BigQuery; the two coexist so the same data and query pattern can be compared across platforms honestly, rather than just picking one and asserting it's the "cloud-ready" choice.
+
+| Script | Purpose |
+|--------|---------|
+| `src/etl/snowflake_setup.py` | Defines the same fact + 5 mart tables as `bigquery_setup.py`, clustered instead of partitioned |
+| `src/etl/migrate_to_snowflake.py` | Idempotently loads the active local backend's data into Snowflake (`write_pandas(..., overwrite=True)`) |
+| `src/analysis/snowflake_cost_comparison.py` | Real-execution partitions-scanned/bytes-scanned comparison, using `INFORMATION_SCHEMA.QUERY_HISTORY()` |
+
+**These are genuinely different mechanisms, not a syntax swap of the same idea:**
+
+| | BigQuery | Snowflake |
+|---|---|---|
+| Partitioning | A separate, explicit mechanism — `PARTITION BY DATE(event_timestamp)` prunes whole day-partitions | **Doesn't exist as a separate concept.** Every table is auto-divided into micro-partitions (~50–500MB uncompressed each) regardless of configuration |
+| Clustering | A second, independent mechanism — `CLUSTER BY product_id` sorts within partitions | The *only* mechanism — `CLUSTER BY (event_timestamp, product_id)` is defined once, doing the job BigQuery splits across two features |
+| Clustering maintenance cost | Free, folded into background storage optimisation | **Not free** — Snowflake's Automatic Clustering service re-sorts micro-partitions as data changes, and this background service itself consumes credits (Snowflake's own docs note you can suspend it "to control cost") |
+| Cost model | Pay per bytes scanned ($6.25/TiB on-demand), a **free dry-run** estimates this with zero execution | Pay per warehouse-size × time (e.g. X-Small = 1 credit/hour, billed per-second, 60s minimum) — **no free dry-run equivalent exists** |
+| How this repo measures efficiency | `job_config.dry_run=True` — real bytes-scanned figures, zero query cost | Query must actually **run** on a warehouse, then `INFORMATION_SCHEMA.QUERY_HISTORY()` reports real `partitions_scanned`/`partitions_total`/`bytes_scanned`/elapsed time — a small, real, unavoidable cost, not a script limitation |
+
+**Why the fact table is clustered on `(event_timestamp, product_id)` together, not split:** every representative query filters on both a date range and a specific `product_id` (the same query `bigquery_cost_comparison.py` uses). BigQuery hands the date filter to partitioning and the product filter to clustering; Snowflake has nowhere else to send the date filter, so the same clustering key has to serve both — date first (coarser, more selective at this table's size), product_id second.
+
+**Honest status:** this code is written and unit-tested (21 tests, mocked `snowflake.connector` client — no live account needed), following the exact same idempotency and "anchor the date window to real data, not `datetime.date.today()`" fix `bigquery_cost_comparison.py` needed after catching a real bug — applied here from day one instead of re-making that mistake. It has **not** been run against a live Snowflake account: this repo has no Snowflake trial set up, and per this project's rule against fabricated numbers, no partitions-scanned or cost figures are reported here yet. Unlike the BigQuery comparison, running this one for real will incur a small, real, unavoidable warehouse-credit cost — there's no free dry-run path to fall back on.
+
+---
+
 ## 🧪 Model Tracking (MLflow)
 
 `src/tune_clusters.py`'s Optuna hyperparameter search for the K-means product clustering (see [Engineering Challenges](#engineering-challenges-solved) and `src/clustering.py`) previously only ever printed its results to the console — no history, no saved model, nothing to compare between runs. Every trial is now logged as its own MLflow run: the tuned parameter (`n_clusters`), the optimisation metric (`silhouette_score`), and the fitted `KMeans` model itself as a versioned artifact.
@@ -434,7 +460,7 @@ The re-run row confirms idempotency — running the pipeline twice produces the 
 - Idempotent UPSERT pattern using `INSERT ... ON CONFLICT DO UPDATE`
 - Apache Airflow DAG with parallel tasks, quality gates, retries, and graceful dbt degradation
 - Docker Compose stack: Airflow 2.8 + PostgreSQL 15 + custom image with dbt-postgres
-- 138-test pytest suite with mocked DB connections for isolated unit testing
+- 159-test pytest suite with mocked DB connections for isolated unit testing
 - GitHub Actions CI running the full test suite on every push
 
 ### Data Analyst
@@ -467,10 +493,10 @@ The re-run row confirms idempotency — running the pipeline twice produces the 
 | **Machine Learning** | scikit-learn | StandardScaler, cosine similarity |
 | **Statistics** | scipy.stats | Hypothesis testing (normality, t-test/Mann-Whitney U), effect size |
 | **Experimental Design** | statsmodels | A/B test power analysis, sample size calculation |
-| **Data Warehousing** | Google BigQuery | Partitioned + clustered cloud fact table, dry-run cost estimation |
+| **Data Warehousing** | Google BigQuery, Snowflake | Partitioned/clustered (BQ) vs. clustered-only (Snowflake) fact tables; dry-run (BQ) vs. QUERY_HISTORY (Snowflake) cost comparison |
 | **Model Tracking** | MLflow | Optuna trial logging, model artifacts, Model Registry |
 | **Dashboard** | Streamlit | Live interactive analytics |
-| **Testing** | pytest, unittest.mock | 138 unit tests, mocked DB layer |
+| **Testing** | pytest, unittest.mock | 159 unit tests, mocked DB layer |
 | **CI/CD** | GitHub Actions | Automated test runs on every push |
 | **Logging** | Python logging | Structured logs to console and file |
 
@@ -539,7 +565,7 @@ Total runtime on a 1,650-event dataset: **under 1 second**.
 ├── pipeline/
 │   ├── run_pipeline.py             # Local 7-step runner
 │   └── dags/retail_pipeline.py    # Airflow DAG — 10 tasks
-├── tests/                          # 138 unit tests
+├── tests/                          # 159 unit tests
 └── app.py                          # Streamlit dashboard
 ```
 
@@ -557,17 +583,18 @@ Total runtime on a 1,650-event dataset: **under 1 second**.
 
 ---
 
-## Testing — 138 Tests, All Passing
+## Testing — 159 Tests, All Passing
 
 ```bash
 pytest
-# 138 passed
+# 159 passed
 ```
 
 | File | Tests | Coverage |
 |------|-------|----------|
 | `test_clean.py` | 24 | European decimal conversion, discount clipping, null dropping, type validation |
 | `test_bigquery_setup.py` | 21 | Partitioning/clustering config, idempotent load (WRITE_TRUNCATE), graceful skip without credentials, date window anchored to real data not wall-clock time |
+| `test_snowflake_setup.py` | 21 | Clustering-key DDL, idempotent load (`overwrite=True`), graceful skip without credentials, date window anchored to real data |
 | `test_statistical_tests.py` | 19 | Normality check structure, test selection logic, effect size correctness on known synthetic data |
 | `test_ab_test_simulation.py` | 18 | Randomization balance/reproducibility, power calculation vs. Cohen (1988) reference, effect detection on manufactured data, honest/simulated-labeled summaries |
 | `test_features.py` | 14 | Median imputation, zero-price row removal, brand encoding, column structure |

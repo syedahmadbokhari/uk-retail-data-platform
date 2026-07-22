@@ -139,3 +139,62 @@ def get_bigquery_client():
             "check is_bigquery_enabled() before calling this."
         )
     return bigquery.Client(project=project)
+
+
+# ── Snowflake — second cloud data warehouse option ─────────────────────────────
+#
+# A fourth, independent backend selected by SNOWFLAKE_ACCOUNT, following the
+# same environment-variable-driven pattern as _build_url() and the BigQuery
+# switch above. This exists ALONGSIDE BigQuery, not instead of it — nothing
+# above this point is touched, and is_bigquery_enabled()/get_bigquery_client()
+# keep working exactly as before. A repo can have both env vars unset (local/
+# CI), or set GOOGLE_CLOUD_PROJECT, or set SNOWFLAKE_ACCOUNT, or both, since
+# src/etl/snowflake_setup.py and bigquery_setup.py are independent scripts —
+# see the README's Cloud Data Warehouse Comparison section for why both exist.
+#
+# Snowflake, like BigQuery, isn't accessed through SQLAlchemy here — DDL
+# features this repo's Snowflake scripts rely on (CLUSTER BY, QUERY_HISTORY
+# query-profiling stats) are expressed directly through snowflake-connector-
+# python, so callers that need Snowflake use get_snowflake_connection()
+# rather than get_connection().
+
+def is_snowflake_enabled() -> bool:
+    """True when SNOWFLAKE_ACCOUNT is set, selecting the Snowflake backend."""
+    return bool(os.getenv("SNOWFLAKE_ACCOUNT"))
+
+
+def get_snowflake_database() -> str:
+    return os.getenv("SNOWFLAKE_DATABASE", "RETAIL_ANALYTICS")
+
+
+def get_snowflake_schema() -> str:
+    return os.getenv("SNOWFLAKE_SCHEMA", "PUBLIC")
+
+
+def get_snowflake_warehouse() -> str:
+    return os.getenv("SNOWFLAKE_WAREHOUSE", "COMPUTE_WH")
+
+
+def get_snowflake_connection():
+    """
+    Returns a snowflake.connector.SnowflakeConnection for the account named
+    in SNOWFLAKE_ACCOUNT. Import is deliberately local to this function so
+    that importing src.utils.db never requires snowflake-connector-python
+    to be installed unless the Snowflake backend is actually used.
+    """
+    import snowflake.connector
+
+    account = os.getenv("SNOWFLAKE_ACCOUNT")
+    if not account:
+        raise RuntimeError(
+            "get_snowflake_connection() called without SNOWFLAKE_ACCOUNT set — "
+            "check is_snowflake_enabled() before calling this."
+        )
+    return snowflake.connector.connect(
+        account=account,
+        user=os.getenv("SNOWFLAKE_USER"),
+        password=os.getenv("SNOWFLAKE_PASSWORD"),
+        warehouse=get_snowflake_warehouse(),
+        database=get_snowflake_database(),
+        schema=get_snowflake_schema(),
+    )

@@ -23,3 +23,6 @@ dbt-postgres>=1.7,<2.0
 
 # ── Cloud data warehouse (optional — only needed when GOOGLE_CLOUD_PROJECT is set) ──
 google-cloud-bigquery>=3.0
+
+# ── Cloud data warehouse (optional — only needed when SNOWFLAKE_ACCOUNT is set) ──
+snowflake-connector-python>=3.0
